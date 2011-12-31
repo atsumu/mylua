@@ -73,7 +73,7 @@ MyLua requires Lua, lua-cjson, and MySQL source code.
 * MyLua
 
   $ cd mylua
-  $ g++ -O2 -I ./lua/include/ -L /usr/lib -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql/include -I ./mysql/sql -I ./mysql/regex -shared -o mylua.so src/mylua.cc lua-cjson/cjson.a -l lua5.1
+  $ g++ -O2 -I ./lua/include/ -L /usr/lib -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql/include -I ./mysql/sql -I ./mysql/regex -shared -o mylua.so src/mylua.cc lua/lib/liblua.a lua-cjson/cjson.a -l lua5.1
   $ sudo cp mylua.so /usr/lib/mysql/plugin/
   $ mysql -u root -e "create function mylua returns string soname 'mylua.so'" -p
 
