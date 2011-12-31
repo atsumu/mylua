@@ -80,6 +80,44 @@ MyLua requires Lua, lua-cjson, and MySQL source code.
 
 
 ================================================================
+ SAMPLE
+================================================================
+
+# prepare sample table
+
+$ mysql -u localuser localuser -e '
+  CREATE TABLE timeline (
+    user_id   int unsigned NOT NULL,
+    status_id int unsigned NOT NULL,
+    PRIMARY KEY (status_id),
+    KEY user_id (user_id, status_id)
+  ) ENGINE=InnoDB;
+
+  INSERT timeline (user_id, status_id)
+  VALUES (1,11),(1,12),(2,21),(3,31),(3,32),(3,33),(5,51);
+'
+
+# call mylua()
+# arguments   : mylua(<lua code>, <json argument>)
+# return value: json string.
+
+$ mysql -u localuser -e '
+  SELECT mylua('\''
+    local t = {};
+    mylua.init_table("localuser", "timeline", "user_id", "user_id", "status_id");
+    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, mylua.arg.uid, mylua.arg.sid);
+    table.insert(t, { mylua.val_int("user_id"), mylua.val_int("status_id") });
+    mylua.index_next();
+    table.insert(t, { mylua.val_int("user_id"), mylua.val_int("status_id") });
+    return t;
+  '\'', '\''{"uid":3,"sid":32}'\'');
+' -p
+
+#=> [[3,32],[3,33]]
+
+
+
+================================================================
  LICENSE
 ================================================================
 
