@@ -2,23 +2,11 @@
 #define MYSQL_SERVER 1
 #include "mysql_priv.h"
 
-// g++ -I ./lua/include/ -L ./lua/lib/ -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql-5.1.41/include -I ./mysql-5.1.41/sql -I ./mysql-5.1.41/regex -shared -o mylua.so mylua.cc lua/lib/liblua.a lua-cjson-1.0.4/cjson.a
-// g++ -I ./lua/include/ -L /usr/lib -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql-5.1.41/include -I ./mysql-5.1.41/sql -I ./mysql-5.1.41/regex -shared -o mylua.so mylua.cc lua-cjson-1.0.4/cjson.a -l lua5.1
 #include "../lua/include/lua.hpp"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-
-// enum_field_types Item::string_field_type() const
-// {
-//   enum_field_types f_type= MYSQL_TYPE_VAR_STRING;
-//   if (max_length >= 16777216)
-//     f_type= MYSQL_TYPE_LONG_BLOB;
-//   else if (max_length >= 65536)
-//     f_type= MYSQL_TYPE_MEDIUM_BLOB;
-//   return f_type;
-// }
 
 //======================================
 // cjson decl
@@ -540,16 +528,6 @@ static int mylua_val_int(lua_State *lua) {
   return 1;
 }
 
-//static int mylua_init_index(lua_State *lua) {
-//  int argc = lua_gettop(lua);
-//  if (argc > 2) {
-//  } else {
-//    lua_pushstring(lua, "mylua_init_one_table: invalid arguments");
-//    lua_error(lua);
-//  }
-//  table->clear_column_bitmaps();
-//}
-
 int luaopen_mylua(lua_State *lua) {
   luaL_Reg reg[] = {
     { "init_table", mylua_init_table },
@@ -586,65 +564,3 @@ int luaopen_mylua(lua_State *lua) {
   return 1;
 }
 
-// typedef struct st_key_part_info {	/* Info about a key part */
-//   Field *field;
-//   uint	offset;				/* offset in record (from 0) */
-//   uint	null_offset;			/* Offset to null_bit in record */
-//   uint16 length;                        /* Length of keypart value in bytes */
-//   /* 
-//     Number of bytes required to store the keypart value. This may be
-//     different from the "length" field as it also counts
-//      - possible NULL-flag byte (see HA_KEY_NULL_LENGTH)
-//      - possible HA_KEY_BLOB_LENGTH bytes needed to store actual value length.
-//   */
-//   uint16 store_length;
-//   uint16 key_type;
-//   uint16 fieldnr;			/* Fieldnum in UNIREG */
-//   uint16 key_part_flag;			/* 0 or HA_REVERSE_SORT */
-//   uint8 type;
-//   uint8 null_bit;			/* Position to null_bit */
-// } KEY_PART_INFO ;
-
-// typedef struct st_key {
-//   uint	key_length;			/* Tot length of key */
-//   ulong flags;                          /* dupp key and pack flags */
-//   uint	key_parts;			/* How many key_parts */
-//   uint  extra_length;
-//   uint	usable_key_parts;		/* Should normally be = key_parts */
-//   uint  block_size;
-//   enum  ha_key_alg algorithm;
-//   /*
-//     Note that parser is used when the table is opened for use, and
-//     parser_name is used when the table is being created.
-//   */
-//   union
-//   {
-//     plugin_ref parser;                  /* Fulltext [pre]parser */
-//     LEX_STRING *parser_name;            /* Fulltext [pre]parser name */
-//   };
-//   KEY_PART_INFO *key_part;
-//   char	*name;				/* Name of key */
-//   /*
-//     Array of AVG(#records with the same field value) for 1st ... Nth key part.
-//     0 means 'not known'.
-//     For temporary heap tables this member is NULL.
-//   */
-//   ulong *rec_per_key;
-//   union {
-//     int  bdb_return_if_eq;
-//   } handler;
-//   struct st_table *table;
-// } KEY;
-
-// TODO: luaのメモリ使用量を制限できるように
-
-// TODO: 関数を登録（キャッシュ）できるように。全スレーブの関数登録状態を管理するのは難しいので、リクエスト毎に一覧を取得して存在しない関数があったら登録するとか。いまいちかも
-
-// TODO: キャッシュ。コードのMD5をキーにする。キーだけ渡してコードを実行とか。→キャッシュアルゴリズムもluaでかけるように。例えばキャッシュアルゴリズム変更・指定用のAPIを用意しておくとか。やりすぎ？
-// TODO: lua_Stateの再利用。初期化後の状態をプールしておく。
-
-// jsonライブラリの比較: http://lua-users.org/wiki/JsonModules
-// /usr/lib/liblua5.1.soがないのでシンボリックリンクを張る: http://d.hatena.ne.jp/cou929_la/20080718/1216391301
-
-// cjsonのmake: env LUA_INCLUDE_DIR=../lua/include LUA_LIB_DIR=../lua/lib make
-// .aを作る: ライブラリの基礎知識: http://www.hi-ho.ne.jp/babaq/linux/libtips.html
