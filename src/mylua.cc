@@ -4,7 +4,7 @@
 
 // g++ -I ./lua/include/ -L ./lua/lib/ -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql-5.1.41/include -I ./mysql-5.1.41/sql -I ./mysql-5.1.41/regex -shared -o mylua.so mylua.cc lua/lib/liblua.a lua-cjson-1.0.4/cjson.a
 // g++ -I ./lua/include/ -L /usr/lib -lm -ldl -Wall -nostartfiles -fPIC -I ./mysql-5.1.41/include -I ./mysql-5.1.41/sql -I ./mysql-5.1.41/regex -shared -o mylua.so mylua.cc lua-cjson-1.0.4/cjson.a -l lua5.1
-#include "lua/include/lua.hpp"
+#include "../lua/include/lua.hpp"
 
 #include <stdio.h>
 #include <string.h>
