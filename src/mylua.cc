@@ -14,9 +14,11 @@ extern "C" {
 int luaopen_cjson(lua_State *l);
 }
 
+
 //======================================
 // mylua decl
 int luaopen_mylua(lua_State *lua);
+
 
 //======================================
 // util
@@ -25,10 +27,12 @@ void *mylua_xmalloc(size_t size) {
   return malloc(size > 0 ? size : 1);
 }
 
+
 void *mylua_xrealloc(void *oldmem, size_t size) {
   if (size == 0) size = 1;
   return oldmem ? realloc(oldmem, size) : malloc(size);
 }
+
 
 void mylua_xfree(void *p) {
   if (p) {
@@ -36,10 +40,12 @@ void mylua_xfree(void *p) {
   }
 }
 
+
 //======================================
 // mylua_area
 
-const int MYLUA_KEYBUF_SIZE = 1000; // インデックスのプレフィックス長は最大1000バイト
+const int MYLUA_KEYBUF_SIZE = 1000; // index prefix length is 1000 bytes at a max.
+
 
 typedef struct st_mylua_area {
   lua_State *lua;
@@ -48,13 +54,14 @@ typedef struct st_mylua_area {
   KEY *key;
   char *result;
   size_t result_size;
-  TABLE_LIST *table_list; // lua受け渡し用。スタックにアロケートされる
+  TABLE_LIST *table_list; // for passing between c and lua. allocated on c stack.
   int init_table_done;
   int init_one_table_done;
   int index_init_done;
   int index_read_map_done;
   //FILE *fp; // for debug print
 } MYLUA_AREA;
+
 
 void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
   if (mylua_area); else return;
@@ -63,6 +70,7 @@ void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
   mylua_xfree(mylua_area->result);
   mylua_xfree(mylua_area);
 }
+
 
 MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)mylua_xmalloc(sizeof(MYLUA_AREA));
@@ -95,6 +103,7 @@ err:
   return 0;
 }
 
+
 int mylua_area_realloc_result(MYLUA_AREA *mylua_area, size_t size) {
   if (size == 0) size = 1;
   char *new_result = (char *)realloc(mylua_area->result, size);
@@ -107,10 +116,12 @@ int mylua_area_realloc_result(MYLUA_AREA *mylua_area, size_t size) {
   }
 }
 
+
 //======================================
 //
 
-const unsigned long MYLUA_ERR_MAX = 255;
+const unsigned long MYLUA_ERRJSON_MAXLEN = 255; // must be >= 40.
+
 
 enum MYLUA_ARG {
   MYLUA_ARG_PROC,
@@ -119,18 +130,47 @@ enum MYLUA_ARG {
   MYLUA_ARG_COUNT,
 };
 
-//// TODO: テーブルからselectしてきた各行の値を渡せるバージョン
-//enum MYLUA_ARG {
-//  MYLUA_ARG_INITPROC,
-//  MYLUA_ARG_MAINPROC,
-//  MYLUA_ARG_ARGC,
-//  // ... argv
-//};
 
 static Item_result mylua_argtype_map[MYLUA_ARG_COUNT] = {
   STRING_RESULT, // MYLUA_ARG_PROC
   STRING_RESULT, // MYLUA_ARG_ARG
 };
+
+
+void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const char *msg2)
+{
+  const char *json_pre = "{\"data\":null,\"is_error\":1,\"message\":\"";
+  const char *json_suf = "\"}";
+  int json_pre_len = strlen(json_pre);
+  int json_suf_len = strlen(json_suf);
+  
+  int msg_allowed_len = MYLUA_ERRJSON_MAXLEN - json_pre_len - json_suf_len;
+  if (msg_allowed_len < 0) {
+    // not enough buffer size, then returns empty string.
+    dst[0] = '\0';
+    *length = 0;
+    return;
+  }
+
+  memcpy(dst, json_pre, json_pre_len);
+
+  int j = 0;
+  const char *msgs[2] = { msg1, msg2 };
+  for (int mi = 0; mi < 2; ++mi) {
+    int msg_len = strlen(msgs[mi]);
+    for (int i = 0; i < msg_len; ++i) {
+      // remove '\\' and '"' for prepend invalid json.
+      if (msgs[mi][i] == '\\' || msgs[mi][i] == '"') continue;
+      if (j >= msg_allowed_len) break;
+      dst[json_pre_len + j] = msgs[mi][i];
+      ++j;
+    }
+  }
+
+  memcpy(dst + json_pre_len + j, json_suf, json_suf_len + 1);
+  *length = json_pre_len + json_suf_len + j;
+}
+
 
 extern "C" my_bool mylua_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 {
@@ -148,30 +188,25 @@ extern "C" my_bool mylua_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
     return 1; \
   }
 
-  // 引数の処理
+  // check arguments.
   MLI_ASSERT_1(args->arg_count == MYLUA_ARG_COUNT, "Wrong arguments count.");
-
   for (int i = 0; i < MYLUA_ARG_COUNT; ++i) {
     MLI_ASSERT_1(args->arg_type[i] == mylua_argtype_map[i], "Wrong argument type.");
   }
 
-  // 返値のための処理
-  // initid->max_lengthの65535は返値がBLOBだということを表すマジックナンバー。
-  // かと思ったら、マジックナンバーじゃないかも？ソースコードをちら見した感じだと、min(initid->max_length, BLOB_WIDTH_MAX)してるだけ。(BLOB_WIDTH_MAX==16777216)
-  // メモリが自動で割り当てられないので、自分で割り当てる必要がある。
-  // TODO: 実際に返せる文字数を実行してみて確認。
+  // process for return value.
   // initid->maybe_null = 1; // default is 1.
   //initid->max_length = 65535; // blob
   initid->max_length = 16777215; // medium blob (?)
 
   // mylua_area
-  // 最低限エラーメッセージが格納できる容量を確保する。
-  MYLUA_AREA *mylua_area = mylua_area_alloc(MYLUA_ERR_MAX + 1);
+  MYLUA_AREA *mylua_area = mylua_area_alloc(MYLUA_ERRJSON_MAXLEN + 1);
   MLI_ASSERT_1(mylua_area, "Couldn't allocate memory. (mylua_area)");
 
   initid->ptr = (char *)mylua_area;
   return 0;
 }
+
 
 extern "C" void mylua_deinit(UDF_INIT *initid)
 {
@@ -179,68 +214,57 @@ extern "C" void mylua_deinit(UDF_INIT *initid)
   initid->ptr = 0;
 }
 
+
 extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned long *length, char *is_null, char *error)
 {
-  *is_null = 0;
   *length = 0;
+  *is_null = 0;
+  *error = 0;
+
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)initid->ptr;
   lua_State *lua = mylua_area->lua;
-  char *re_pos = mylua_area->result;
 
-  // 引数
+  // arguments
   char *proc = args->args[MYLUA_ARG_PROC];
   char *arg  = args->args[MYLUA_ARG_ARG];
 
   lua_pushlightuserdata(lua, mylua_area);
   lua_setfield(lua, LUA_REGISTRYINDEX, "mylua_area");
 
+  // alloc table_list
   TABLE_LIST table_list;
   mylua_area->table_list = &table_list;
 
-  // エラー時でもjsonを返す。トップレベルの要素はdata, is_error, messageの3つ
-  // mylua.argに引数をセット
+  // set mylua.arg to json decoded arg.
   lua_getglobal(lua, "mylua");
+
   lua_getglobal(lua, "cjson");
   lua_getfield(lua, -1, "decode");
   lua_remove(lua, -2);
+  
   lua_pushstring(lua, arg);
   lua_pcall(lua, 1, 1, 0);
   lua_setfield(lua, -2, "arg");
 
+  // push cjson.encode for encode return value.
   lua_getglobal(lua, "cjson");
   lua_getfield(lua, -1, "encode");
   lua_remove(lua, -2);
 
-// goto使うとコンパイルエラーになるのでマクロで。
+// use macro, because compile error occured when use goto.
+#define ML_CLEAN() \
+  if (mylua_area->index_init_done) { \
+    table_list.table->file->ha_index_end(); \
+  } \
+  if (mylua_area->init_one_table_done) { \
+    close_thread_tables(current_thd); \
+  }
 #define ML_ASSERT(cond, msg) \
   if (cond) { \
   } else { \
-    if (mylua_area->index_init_done) { \
-      table_list.table->file->ha_index_end(); \
-    } \
-    if (mylua_area->init_one_table_done) { \
-      close_thread_tables(current_thd); \
-    } \
-    size_t str_c; \
-    const char *str = lua_tolstring(lua, -1, &str_c); \
-    const char *result = "{\"data\":null,\"is_error\":1,\"message\":\""; \
-    *length = strlen(result); \
-    *length = *length < MYLUA_ERR_MAX ? *length : MYLUA_ERR_MAX; \
-    memcpy(mylua_area->result, result, *length); \
-    memcpy(mylua_area->result + *length, msg, MYLUA_ERR_MAX - *length); \
-    *length = *length + strlen(msg) < MYLUA_ERR_MAX ? *length + strlen(msg) : MYLUA_ERR_MAX; \
-    memcpy(mylua_area->result + *length, str, MYLUA_ERR_MAX - *length); \
-    *length = *length + str_c < MYLUA_ERR_MAX ? *length + str_c : MYLUA_ERR_MAX; \
-    if (*length + 2 <= MYLUA_ERR_MAX) { \
-      mylua_area->result[*length + 0] = '\"'; \
-      mylua_area->result[*length + 1] = '}'; \
-      mylua_area->result[*length + 2] = '\0'; \
-      *length += 2; \
-    } else { \
-      mylua_area->result[*length - 2] = '\"'; \
-      mylua_area->result[*length - 1] = '}'; \
-      mylua_area->result[*length - 0] = '\0'; \
-    } \
+    ML_CLEAN(); \
+    const char *errmsg = lua_tostring(lua, -1); \
+    mylua_error_json(mylua_area->result, length, msg, errmsg); \
     return mylua_area->result; \
   }
 
@@ -267,29 +291,22 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   default:
     ML_ASSERT(0, "lua_pcall: defualt: ");
   }
-  // TODO: 後処理
-  //+int argc = lua_gettop(lua);
-  //+char *msg = tcsprintf("Lua error: %s", argc > 0 ? lua_tostring(lua, argc) : "unknown");
 
-  lua_pcall(lua, 1, 1, 0);
+  lua_pcall(lua, 1, 1, 0); // TODO: error handling
 
-  size_t str_c;
-  const char *str = lua_tolstring(lua, -1, &str_c);
-  if (str_c > mylua_area->result_size) {
-    ML_ASSERT(mylua_area_realloc_result(mylua_area, str_c), "mylua_area_realloc_result failed");
+  size_t json_len;
+  const char *json = lua_tolstring(lua, -1, &json_len);
+  if (json_len + 1 > mylua_area->result_size) {
+    ML_ASSERT(mylua_area_realloc_result(mylua_area, json_len + 1), "mylua_area_realloc_result failed");
   }
-  re_pos += sprintf(re_pos, "%s", str);
+  memcpy(mylua_area->result, json, json_len + 1);
 
-  if (mylua_area->index_init_done) {
-    table_list.table->file->ha_index_end();
-  }
-  if (mylua_area->init_one_table_done) {
-    close_thread_tables(current_thd);
-  }
+  ML_CLEAN();
 
-  *length = re_pos - mylua_area->result;
+  *length = json_len;
   return mylua_area->result;
 }
+
 
 Field *mylua_get_field(TABLE *table, const char *name) {
   Field **f;
@@ -301,9 +318,8 @@ Field *mylua_get_field(TABLE *table, const char *name) {
   return NULL;
 }
 
+
 KEY *mylua_index_init(TABLE *table, const char *name, bool sorted) {
-  // mysql-5.1.41では、できるだけtable->sを使わないほうがよさそう。
-  // table->s->keysとかtable->s->key_infoとかに入ってる値がおかしいので、他のもおかしいかも。
   for (uint keynr = 0; keynr < table->s->keynames.count; ++keynr) {
     if (strcmp(table->s->keynames.type_names[keynr], name) == 0) {
       if (table->file->ha_index_init(keynr, sorted)) {
@@ -314,6 +330,7 @@ KEY *mylua_index_init(TABLE *table, const char *name, bool sorted) {
   }
   return NULL;
 }
+
 
 static int mylua_init_table(lua_State *lua) {
 #define MLIT_ASSERT(cond) \
@@ -340,7 +357,6 @@ static int mylua_init_table(lua_State *lua) {
 
   TABLE_LIST *table_list = mylua_area->table_list;
 
-  // 2回以上init_one_tableして問題ないかわからないので、とりあえずできないように。
   MLIT_ASSERT(!mylua_area->init_one_table_done);
   table_list->init_one_table(db, tbl, TL_READ);
   mylua_area->init_one_table_done = 1;
@@ -366,7 +382,7 @@ static int mylua_init_table(lua_State *lua) {
   memset(mylua_area->keybuf, 0, key->key_length);
   mylua_area->keypart_map = (1 << fld_c) - 1;
 
-  // 面倒なメモリ割り当てを避けるため、ループしなおす
+  // re-loop, for avoid memory allocation.
   argi = fld_0;
   for (int i = 0; ++argi <= argc; ++i) {
     const char *fld = lua_tostring(lua, argi);
@@ -378,6 +394,7 @@ static int mylua_init_table(lua_State *lua) {
 
   return 0;
 }
+
 
 static int mylua_index_read_map(lua_State *lua) {
 #define MLIRM_ASSERT(cond) \
@@ -445,6 +462,7 @@ static int mylua_index_read_map(lua_State *lua) {
   return 1;
 }
 
+
 static int mylua_index_prev(lua_State *lua) {
 #define MLIP_ASSERT(cond) \
   if (cond) { \
@@ -472,6 +490,7 @@ static int mylua_index_prev(lua_State *lua) {
   return 1;
 }
 
+
 static int mylua_index_next(lua_State *lua) {
 #define MLIN_ASSERT(cond) \
   if (cond) { \
@@ -498,6 +517,7 @@ static int mylua_index_next(lua_State *lua) {
 
   return 1;
 }
+
 
 static int mylua_val_int(lua_State *lua) {
 #define MLVI_ASSERT(cond) \
@@ -527,6 +547,7 @@ static int mylua_val_int(lua_State *lua) {
 
   return 1;
 }
+
 
 int luaopen_mylua(lua_State *lua) {
   luaL_Reg reg[] = {
