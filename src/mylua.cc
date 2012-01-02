@@ -18,6 +18,7 @@ int luaopen_cjson(lua_State *l);
 //======================================
 // mylua decl
 int luaopen_mylua(lua_State *lua);
+void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize);
 
 
 //======================================
@@ -49,6 +50,8 @@ const int MYLUA_KEYBUF_SIZE = 1000; // index prefix length is 1000 bytes at a ma
 
 typedef struct st_mylua_area {
   lua_State *lua;
+  size_t lua_memory_usage;
+  size_t lua_memory_limit_bytes;
   uchar *keybuf;
   key_part_map keypart_map;
   KEY *key;
@@ -77,7 +80,9 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   if (mylua_area); else goto err;
   memset(mylua_area, 0, sizeof(MYLUA_AREA));
 
-  mylua_area->lua = luaL_newstate();
+  mylua_area->lua_memory_limit_bytes = 1024 * 1024;
+  mylua_area->lua_memory_usage = 0;
+  mylua_area->lua = lua_newstate(mylua_l_alloc, mylua_area);
   if (mylua_area->lua); else goto err;
   luaL_openlibs(mylua_area->lua);
   luaopen_cjson(mylua_area->lua);
@@ -98,6 +103,7 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   mylua_area->index_read_map_done = 0;
 
   return mylua_area;
+
 err:
   mylua_area_dealloc(mylua_area);
   return 0;
@@ -143,7 +149,7 @@ void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const 
   const char *json_suf = "\"}";
   int json_pre_len = strlen(json_pre);
   int json_suf_len = strlen(json_suf);
-  
+
   int msg_allowed_len = MYLUA_ERRJSON_MAXLEN - json_pre_len - json_suf_len;
   if (msg_allowed_len < 0) {
     // not enough buffer size, then returns empty string.
@@ -268,31 +274,46 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
     return mylua_area->result; \
   }
 
-  switch (luaL_loadstring(lua, proc)) {
-  case 0: // no error
-    break;
-  case LUA_ERRSYNTAX:
-    ML_ASSERT(0, "luaL_loadstring: LUA_ERRSYNTAX: ");
-  case LUA_ERRMEM:
-    ML_ASSERT(0, "luaL_loadstring: LUA_ERRMEM: ");
-  default:
-    ML_ASSERT(0, "luaL_loadstring: default: ");
+  int err;
+  err = luaL_loadstring(lua, proc);
+  if (err) {
+    switch (err) {
+    case LUA_ERRSYNTAX:
+      ML_ASSERT(0, "luaL_loadstring: LUA_ERRSYNTAX: ");
+    case LUA_ERRMEM:
+      ML_ASSERT(0, "luaL_loadstring: LUA_ERRMEM: ");
+    default:
+      ML_ASSERT(0, "luaL_loadstring: default: ");
+    }
   }
 
-  switch (lua_pcall(lua, 0, 1, 0)) {
-  case 0: // no error
-    break;
-  case LUA_ERRRUN:
-    ML_ASSERT(0, "lua_pcall: LUA_ERRRUN: ");
-  case LUA_ERRMEM:
-    ML_ASSERT(0, "lua_pcall: LUA_ERRMEM: ");
-  case LUA_ERRERR:
-    ML_ASSERT(0, "lua_pcall: LUA_ERRERR: ");
-  default:
-    ML_ASSERT(0, "lua_pcall: defualt: ");
+  err = lua_pcall(lua, 0, 1, 0);
+  if (err) {
+    switch (err) {
+    case LUA_ERRRUN:
+      ML_ASSERT(0, "lua_pcall: LUA_ERRRUN: ");
+    case LUA_ERRMEM:
+      ML_ASSERT(0, "lua_pcall: LUA_ERRMEM: ");
+    case LUA_ERRERR:
+      ML_ASSERT(0, "lua_pcall: LUA_ERRERR: ");
+    default:
+      ML_ASSERT(0, "lua_pcall: defualt: ");
+    }
   }
 
-  lua_pcall(lua, 1, 1, 0); // TODO: error handling
+  err = lua_pcall(lua, 1, 1, 0);
+  if (err) {
+    switch (err) {
+    case LUA_ERRRUN:
+      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRRUN: ");
+    case LUA_ERRMEM:
+      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRMEM: ");
+    case LUA_ERRERR:
+      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRERR: ");
+    default:
+      ML_ASSERT(0, "lua_pcall(cjson.encode): defualt: ");
+    }
+  }
 
   size_t json_len;
   const char *json = lua_tolstring(lua, -1, &json_len);
@@ -331,6 +352,29 @@ KEY *mylua_index_init(TABLE *table, const char *name, bool sorted) {
   return NULL;
 }
 
+
+//======================================
+// lua allocate function
+
+// extend lua default allocate function to limit maximum memory usage.
+void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
+  mylua_area->lua_memory_usage += nsize - osize;
+  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
+    return NULL;
+  }
+
+  return realloc(ptr, nsize);
+}
+
+
+//======================================
+// mylua API
 
 static int mylua_init_table(lua_State *lua) {
 #define MLIT_ASSERT(cond) \
@@ -549,13 +593,59 @@ static int mylua_val_int(lua_State *lua) {
 }
 
 
+static int mylua_set_memory_limit_bytes(lua_State *lua) {
+#define MLSMLB_ASSERT(cond) \
+  if (cond) { \
+  } else { \
+    lua_pushstring(lua, "mylua_set_memory_limit_bytes: " # cond); \
+    lua_error(lua); \
+    return 0; \
+  }
+
+  int argi = 0;
+  int argc = lua_gettop(lua);
+  MLSMLB_ASSERT(argc == 1);
+
+  lua_getfield(lua, LUA_REGISTRYINDEX, "mylua_area");
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, -1);
+
+  mylua_area->lua_memory_limit_bytes = lua_tointeger(lua, ++argi);
+
+  return 0;
+}
+
+
+static int mylua_get_memory_limit_bytes(lua_State *lua) {
+#define MLGMLB_ASSERT(cond) \
+  if (cond) { \
+  } else { \
+    lua_pushstring(lua, "mylua_set_memory_limit_bytes: " # cond); \
+    lua_error(lua); \
+    return 0; \
+  }
+
+  //int argi = 0;
+  int argc = lua_gettop(lua);
+  MLGMLB_ASSERT(argc == 0);
+
+  lua_getfield(lua, LUA_REGISTRYINDEX, "mylua_area");
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, -1);
+
+  lua_pushinteger(lua, mylua_area->lua_memory_limit_bytes);
+
+  return 1;
+}
+
+
 int luaopen_mylua(lua_State *lua) {
   luaL_Reg reg[] = {
     { "init_table", mylua_init_table },
     { "index_read_map", mylua_index_read_map },
-    { "val_int", mylua_val_int },
     { "index_prev", mylua_index_prev },
     { "index_next", mylua_index_next },
+    { "val_int", mylua_val_int },
+    { "set_memory_limit_bytes", mylua_set_memory_limit_bytes },
+    { "get_memory_limit_bytes", mylua_get_memory_limit_bytes },
     { NULL, NULL }
   };
   luaL_register(lua, "mylua", reg);
