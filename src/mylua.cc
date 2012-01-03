@@ -145,7 +145,7 @@ static Item_result mylua_argtype_map[MYLUA_ARG_COUNT] = {
 
 void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const char *msg2)
 {
-  const char *json_pre = "{\"data\":null,\"is_error\":1,\"message\":\"";
+  const char *json_pre = "{\"data\":null,\"is_error\":true,\"message\":\"";
   const char *json_suf = "\"}";
   int json_pre_len = strlen(json_pre);
   int json_suf_len = strlen(json_suf);
@@ -257,6 +257,14 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   lua_getfield(lua, -1, "encode");
   lua_remove(lua, -2);
 
+  lua_newtable(lua);
+
+  lua_pushstring(lua, "is_error");
+  lua_pushboolean(lua, 0);
+  lua_settable(lua, -3);
+
+  lua_pushstring(lua, "data");
+
 // use macro, because compile error occured when use goto.
 #define ML_CLEAN() \
   if (mylua_area->index_init_done) { \
@@ -271,6 +279,10 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
     ML_CLEAN(); \
     const char *errmsg = lua_tostring(lua, -1); \
     mylua_error_json(mylua_area->result, length, msg, errmsg); \
+    if (*length == 0) { \
+      *is_null = 1; \
+      return 0; \
+    } \
     return mylua_area->result; \
   }
 
@@ -300,6 +312,8 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
       ML_ASSERT(0, "lua_pcall: defualt: ");
     }
   }
+
+  lua_settable(lua, -3);
 
   err = lua_pcall(lua, 1, 1, 0);
   if (err) {
