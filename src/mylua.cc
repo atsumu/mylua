@@ -145,7 +145,7 @@ static Item_result mylua_argtype_map[MYLUA_ARG_COUNT] = {
 
 void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const char *msg2)
 {
-  const char *json_pre = "{\"data\":null,\"is_error\":true,\"message\":\"";
+  const char *json_pre = "{\"is_error\":true,\"message\":\"";
   const char *json_suf = "\"}";
   int json_pre_len = strlen(json_pre);
   int json_suf_len = strlen(json_suf);
@@ -241,6 +241,28 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   TABLE_LIST table_list;
   mylua_area->table_list = &table_list;
 
+// use macro, because compile error occured when use goto.
+#define ML_CLEAN() \
+  if (mylua_area->index_init_done) { \
+    table_list.table->file->ha_index_end(); \
+  } \
+  if (mylua_area->init_one_table_done) { \
+    close_thread_tables(current_thd); \
+  }
+
+#define ML_ASSERT(cond, msg) \
+  if (cond) { \
+  } else { \
+    ML_CLEAN(); \
+    const char *errmsg = lua_tostring(lua, -1); \
+    mylua_error_json(mylua_area->result, length, msg, errmsg); \
+    if (*length == 0) { \
+      *is_null = 1; \
+      return 0; \
+    } \
+    return mylua_area->result; \
+  }
+
   // set mylua.arg to json decoded arg.
   lua_getglobal(lua, "mylua");
 
@@ -249,7 +271,18 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   lua_remove(lua, -2);
   
   lua_pushstring(lua, arg);
-  lua_pcall(lua, 1, 1, 0);
+  if (int err = lua_pcall(lua, 1, 1, 0)) {
+    switch (err) {
+    case LUA_ERRRUN:
+      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRRUN: ");
+    case LUA_ERRMEM:
+      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRMEM: ");
+    case LUA_ERRERR:
+      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRERR: ");
+    default:
+      ML_ASSERT(0, "lua_pcall(cjson.decode): defualt: ");
+    }
+  }
   lua_setfield(lua, -2, "arg");
 
   // push cjson.encode for encode return value.
@@ -265,30 +298,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
 
   lua_pushstring(lua, "data");
 
-// use macro, because compile error occured when use goto.
-#define ML_CLEAN() \
-  if (mylua_area->index_init_done) { \
-    table_list.table->file->ha_index_end(); \
-  } \
-  if (mylua_area->init_one_table_done) { \
-    close_thread_tables(current_thd); \
-  }
-#define ML_ASSERT(cond, msg) \
-  if (cond) { \
-  } else { \
-    ML_CLEAN(); \
-    const char *errmsg = lua_tostring(lua, -1); \
-    mylua_error_json(mylua_area->result, length, msg, errmsg); \
-    if (*length == 0) { \
-      *is_null = 1; \
-      return 0; \
-    } \
-    return mylua_area->result; \
-  }
-
-  int err;
-  err = luaL_loadstring(lua, proc);
-  if (err) {
+  if (int err = luaL_loadstring(lua, proc)) {
     switch (err) {
     case LUA_ERRSYNTAX:
       ML_ASSERT(0, "luaL_loadstring: LUA_ERRSYNTAX: ");
@@ -299,8 +309,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
     }
   }
 
-  err = lua_pcall(lua, 0, 1, 0);
-  if (err) {
+  if (int err = lua_pcall(lua, 0, 1, 0)) {
     switch (err) {
     case LUA_ERRRUN:
       ML_ASSERT(0, "lua_pcall: LUA_ERRRUN: ");
@@ -315,8 +324,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
 
   lua_settable(lua, -3);
 
-  err = lua_pcall(lua, 1, 1, 0);
-  if (err) {
+  if (int err = lua_pcall(lua, 1, 1, 0)) {
     switch (err) {
     case LUA_ERRRUN:
       ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRRUN: ");
