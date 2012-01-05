@@ -87,6 +87,8 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   luaL_openlibs(mylua_area->lua);
   luaopen_cjson(mylua_area->lua);
   luaopen_mylua(mylua_area->lua);
+  lua_pop(mylua_area->lua, 1); // for cjson.
+  lua_pop(mylua_area->lua, 1); // for mylua.
 
   mylua_area->keybuf = (uchar *)mylua_xmalloc(sizeof(uchar) * MYLUA_KEYBUF_SIZE);
   mylua_area->keypart_map = 0;
@@ -234,9 +236,6 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   char *proc = args->args[MYLUA_ARG_PROC];
   char *arg  = args->args[MYLUA_ARG_ARG];
 
-  lua_pushlightuserdata(lua, mylua_area);
-  lua_setfield(lua, LUA_REGISTRYINDEX, "mylua_area");
-
   // alloc table_list
   TABLE_LIST table_list;
   mylua_area->table_list = &table_list;
@@ -255,6 +254,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   } else { \
     ML_CLEAN(); \
     const char *errmsg = lua_tostring(lua, -1); \
+    if (errmsg == NULL) errmsg = ""; \
     mylua_error_json(mylua_area->result, length, msg, errmsg); \
     if (*length == 0) { \
       *is_null = 1; \
@@ -262,6 +262,13 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
     } \
     return mylua_area->result; \
   }
+
+  ML_ASSERT(proc, "argument <proc> should not be null.");
+  ML_ASSERT(arg, "argument <arg> should not be null.");
+
+  //
+  lua_pushlightuserdata(lua, mylua_area);
+  lua_setfield(lua, LUA_REGISTRYINDEX, "mylua_area");
 
   // set mylua.arg to json decoded arg.
   lua_getglobal(lua, "mylua");
@@ -694,6 +701,7 @@ int luaopen_mylua(lua_State *lua) {
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_DISJOINT);
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_EQUAL);
 
+  // return mylua table.
   return 1;
 }
 
