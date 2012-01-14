@@ -11,12 +11,14 @@
 //======================================
 // cjson decl
 extern "C" {
+#define LUA_CJSONLIBNAME "cjson"
 int luaopen_cjson(lua_State *l);
 }
 
 
 //======================================
 // mylua decl
+#define LUA_MYLUALIBNAME "mylua"
 int luaopen_mylua(lua_State *lua);
 void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize);
 
@@ -48,6 +50,31 @@ void mylua_xfree(void *p) {
 const int MYLUA_KEYBUF_SIZE = 1000; // index prefix length is 1000 bytes at a max.
 
 
+static const luaL_Reg lualibs[] = {
+  {"", luaopen_base},
+  {LUA_LOADLIBNAME, luaopen_package},
+  {LUA_TABLIBNAME, luaopen_table},
+  //{LUA_IOLIBNAME, luaopen_io}, // do not load.
+  //{LUA_OSLIBNAME, luaopen_os}, // do not load.
+  {LUA_STRLIBNAME, luaopen_string},
+  {LUA_MATHLIBNAME, luaopen_math},
+  {LUA_DBLIBNAME, luaopen_debug},
+  {LUA_CJSONLIBNAME, luaopen_cjson},
+  {LUA_MYLUALIBNAME, luaopen_mylua},
+  {NULL, NULL}
+};
+
+
+void mylua_openlibs(lua_State *lua) {
+  const luaL_Reg *lib = lualibs;
+  for (; lib->func; ++lib) {
+    lua_pushcfunction(lua, lib->func);
+    lua_pushstring(lua, lib->name);
+    lua_call(lua, 1, 0);
+  }
+}
+
+
 typedef struct st_mylua_area {
   lua_State *lua;
   size_t lua_memory_usage;
@@ -76,7 +103,9 @@ void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
 
 
 MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
-  MYLUA_AREA *mylua_area = (MYLUA_AREA *)mylua_xmalloc(sizeof(MYLUA_AREA));
+  MYLUA_AREA *mylua_area;
+
+  mylua_area = (MYLUA_AREA *)mylua_xmalloc(sizeof(MYLUA_AREA));
   if (mylua_area); else goto err;
   memset(mylua_area, 0, sizeof(MYLUA_AREA));
 
@@ -84,11 +113,7 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   mylua_area->lua_memory_usage = 0;
   mylua_area->lua = lua_newstate(mylua_l_alloc, mylua_area);
   if (mylua_area->lua); else goto err;
-  luaL_openlibs(mylua_area->lua);
-  luaopen_cjson(mylua_area->lua);
-  luaopen_mylua(mylua_area->lua);
-  lua_pop(mylua_area->lua, 1); // for cjson.
-  lua_pop(mylua_area->lua, 1); // for mylua.
+  mylua_openlibs(mylua_area->lua);
 
   mylua_area->keybuf = (uchar *)mylua_xmalloc(sizeof(uchar) * MYLUA_KEYBUF_SIZE);
   mylua_area->keypart_map = 0;
@@ -276,7 +301,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   lua_getglobal(lua, "cjson");
   lua_getfield(lua, -1, "decode");
   lua_remove(lua, -2);
-  
+
   lua_pushstring(lua, arg);
   if (int err = lua_pcall(lua, 1, 1, 0)) {
     switch (err) {
@@ -677,7 +702,7 @@ int luaopen_mylua(lua_State *lua) {
     { "get_memory_limit_bytes", mylua_get_memory_limit_bytes },
     { NULL, NULL }
   };
-  luaL_register(lua, "mylua", reg);
+  luaL_register(lua, LUA_MYLUALIBNAME, reg);
 
   lua_pushliteral(lua, "0.0.1");
   lua_setfield(lua, -2, "version");
