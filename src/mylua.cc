@@ -65,13 +65,14 @@ static const luaL_Reg lualibs[] = {
 };
 
 
-void mylua_openlibs(lua_State *lua) {
+int mylua_openlibs(lua_State *lua) {
   const luaL_Reg *lib = lualibs;
   for (; lib->func; ++lib) {
     lua_pushcfunction(lua, lib->func);
     lua_pushstring(lua, lib->name);
     lua_call(lua, 1, 0);
   }
+  return 0;
 }
 
 
@@ -113,7 +114,7 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   mylua_area->lua_memory_usage = 0;
   mylua_area->lua = lua_newstate(mylua_l_alloc, mylua_area);
   if (mylua_area->lua); else goto err;
-  mylua_openlibs(mylua_area->lua);
+  if (lua_cpcall(mylua_area->lua, mylua_openlibs, 0)) goto err;
 
   mylua_area->keybuf = (uchar *)mylua_xmalloc(sizeof(uchar) * MYLUA_KEYBUF_SIZE);
   mylua_area->keypart_map = 0;
@@ -248,6 +249,63 @@ extern "C" void mylua_deinit(UDF_INIT *initid)
 }
 
 
+typedef struct st_pmylua_arg {
+  MYLUA_AREA *mylua_area;
+  char *proc;
+  char *arg;
+  size_t json_len;
+  const char *json;
+} PMYLUA_ARG;
+
+
+int pmylua(lua_State *lua) {
+  PMYLUA_ARG *pmylua_arg = (PMYLUA_ARG *)lua_touserdata(lua, 1);
+  MYLUA_AREA *mylua_area = pmylua_arg->mylua_area;
+  char *proc = pmylua_arg->proc;
+  char *arg = pmylua_arg->arg;
+
+  //
+  lua_pushlightuserdata(lua, mylua_area);
+  lua_setfield(lua, LUA_REGISTRYINDEX, "mylua_area");
+
+  // set mylua.arg to json decoded arg.
+  lua_getglobal(lua, "mylua");
+
+  lua_getglobal(lua, "cjson");
+  lua_getfield(lua, -1, "decode");
+  lua_remove(lua, -2);
+
+  lua_pushstring(lua, arg);
+  lua_call(lua, 1, 1);
+  lua_setfield(lua, -2, "arg");
+
+  // push cjson.encode for encode return value.
+  lua_getglobal(lua, "cjson");
+  lua_getfield(lua, -1, "encode");
+  lua_remove(lua, -2);
+
+  lua_newtable(lua);
+
+  lua_pushstring(lua, "is_error");
+  lua_pushboolean(lua, 0);
+  lua_settable(lua, -3);
+
+  lua_pushstring(lua, "data");
+  if (luaL_loadstring(lua, proc)) {
+    lua_error(lua);
+    return 0;
+  }
+  lua_call(lua, 0, 1);
+  lua_settable(lua, -3);
+
+  // call cjson.encode.
+  lua_call(lua, 1, 1);
+
+  pmylua_arg->json = lua_tolstring(lua, -1, &pmylua_arg->json_len);
+  return 0;
+}
+
+
 extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned long *length, char *is_null, char *error)
 {
   *length = 0;
@@ -291,88 +349,29 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   ML_ASSERT(proc, "argument <proc> should not be null.");
   ML_ASSERT(arg, "argument <arg> should not be null.");
 
-  //
-  lua_pushlightuserdata(lua, mylua_area);
-  lua_setfield(lua, LUA_REGISTRYINDEX, "mylua_area");
-
-  // set mylua.arg to json decoded arg.
-  lua_getglobal(lua, "mylua");
-
-  lua_getglobal(lua, "cjson");
-  lua_getfield(lua, -1, "decode");
-  lua_remove(lua, -2);
-
-  lua_pushstring(lua, arg);
-  if (int err = lua_pcall(lua, 1, 1, 0)) {
+  PMYLUA_ARG pmylua_arg = {0};
+  pmylua_arg.mylua_area = mylua_area;
+  pmylua_arg.proc = proc;
+  pmylua_arg.arg = arg;
+  if (int err = lua_cpcall(lua, pmylua, &pmylua_arg)) {
     switch (err) {
     case LUA_ERRRUN:
-      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRRUN: ");
+      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRRUN: ");
     case LUA_ERRMEM:
-      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRMEM: ");
+      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRMEM: ");
     case LUA_ERRERR:
-      ML_ASSERT(0, "lua_pcall(cjson.decode): LUA_ERRERR: ");
+      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRERR: ");
     default:
-      ML_ASSERT(0, "lua_pcall(cjson.decode): defualt: ");
-    }
-  }
-  lua_setfield(lua, -2, "arg");
-
-  // push cjson.encode for encode return value.
-  lua_getglobal(lua, "cjson");
-  lua_getfield(lua, -1, "encode");
-  lua_remove(lua, -2);
-
-  lua_newtable(lua);
-
-  lua_pushstring(lua, "is_error");
-  lua_pushboolean(lua, 0);
-  lua_settable(lua, -3);
-
-  lua_pushstring(lua, "data");
-
-  if (int err = luaL_loadstring(lua, proc)) {
-    switch (err) {
-    case LUA_ERRSYNTAX:
-      ML_ASSERT(0, "luaL_loadstring: LUA_ERRSYNTAX: ");
-    case LUA_ERRMEM:
-      ML_ASSERT(0, "luaL_loadstring: LUA_ERRMEM: ");
-    default:
-      ML_ASSERT(0, "luaL_loadstring: default: ");
+      ML_ASSERT(0, "lua_cpcall(pmylua): defualt: ");
     }
   }
 
-  if (int err = lua_pcall(lua, 0, 1, 0)) {
-    switch (err) {
-    case LUA_ERRRUN:
-      ML_ASSERT(0, "lua_pcall: LUA_ERRRUN: ");
-    case LUA_ERRMEM:
-      ML_ASSERT(0, "lua_pcall: LUA_ERRMEM: ");
-    case LUA_ERRERR:
-      ML_ASSERT(0, "lua_pcall: LUA_ERRERR: ");
-    default:
-      ML_ASSERT(0, "lua_pcall: defualt: ");
-    }
-  }
+  size_t json_len = pmylua_arg.json_len;
+  const char *json = pmylua_arg.json;
+  ML_ASSERT(json, "return json is null.");
 
-  lua_settable(lua, -3);
-
-  if (int err = lua_pcall(lua, 1, 1, 0)) {
-    switch (err) {
-    case LUA_ERRRUN:
-      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRRUN: ");
-    case LUA_ERRMEM:
-      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRMEM: ");
-    case LUA_ERRERR:
-      ML_ASSERT(0, "lua_pcall(cjson.encode): LUA_ERRERR: ");
-    default:
-      ML_ASSERT(0, "lua_pcall(cjson.encode): defualt: ");
-    }
-  }
-
-  size_t json_len;
-  const char *json = lua_tolstring(lua, -1, &json_len);
   if (json_len + 1 > mylua_area->result_size) {
-    ML_ASSERT(mylua_area_realloc_result(mylua_area, json_len + 1), "mylua_area_realloc_result failed");
+    ML_ASSERT(mylua_area_realloc_result(mylua_area, json_len + 1), "mylua_area_realloc_result failed.");
   }
   memcpy(mylua_area->result, json, json_len + 1);
 
