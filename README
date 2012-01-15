@@ -24,6 +24,7 @@ MyLua requires Lua, lua-cjson, and MySQL source code.
   $ mv lua-5.1.4 lua
   $ cd lua
   $ make linux
+  $ make local
 
 
 * Lua CJSON
