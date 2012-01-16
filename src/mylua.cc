@@ -2,7 +2,11 @@
 #define MYSQL_SERVER 1
 #include "mysql_priv.h"
 
-#include "../lua/include/lua.hpp"
+#ifdef MYLUA_USE_LUAJIT
+# include "../luajit/include/luajit-2.0/lua.hpp"
+#else
+# include "../lua/include/lua.hpp"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +24,6 @@ int luaopen_cjson(lua_State *l);
 // mylua decl
 #define LUA_MYLUALIBNAME "mylua"
 int luaopen_mylua(lua_State *lua);
-void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize);
 
 
 //======================================
@@ -61,9 +64,19 @@ static const luaL_Reg lualibs[] = {
   {LUA_DBLIBNAME, luaopen_debug},
   {LUA_CJSONLIBNAME, luaopen_cjson},
   {LUA_MYLUALIBNAME, luaopen_mylua},
+#ifdef MYLUA_USE_LUAJIT
+  {LUA_BITLIBNAME, luaopen_bit },
+  {LUA_JITLIBNAME, luaopen_jit },
+#endif
   {NULL, NULL}
 };
 
+//FFI:static const luaL_Reg lj_lib_preload[] = {
+//FFI:#if LJ_HASFFI
+//FFI:  { LUA_FFILIBNAME,	luaopen_ffi },
+//FFI:#endif
+//FFI:  { NULL,		NULL }
+//FFI:};
 
 int mylua_openlibs(lua_State *lua) {
   const luaL_Reg *lib = lualibs;
@@ -72,12 +85,22 @@ int mylua_openlibs(lua_State *lua) {
     lua_pushstring(lua, lib->name);
     lua_call(lua, 1, 0);
   }
+//FFI:#ifdef MYLUA_USE_LUAJIT
+//FFI:  luaL_findtable(lua, LUA_REGISTRYINDEX, "_PRELOAD", sizeof(lj_lib_preload) / sizeof(lj_lib_preload[0]) - 1);
+//FFI:  for (lib = lj_lib_preload; lib->func; lib++) {
+//FFI:    lua_pushcfunction(L, lib->func);
+//FFI:    lua_setfield(L, -2, lib->name);
+//FFI:  }
+//FFI:  lua_pop(L, 1);
+//FFI:#endif
   return 0;
 }
 
 
 typedef struct st_mylua_area {
   lua_State *lua;
+  lua_Alloc old_allocf;
+  void *old_allocd;
   size_t lua_memory_usage;
   size_t lua_memory_limit_bytes;
   uchar *keybuf;
@@ -92,6 +115,57 @@ typedef struct st_mylua_area {
   int index_read_map_done;
   //FILE *fp; // for debug print
 } MYLUA_AREA;
+
+
+//======================================
+// lua allocate function
+
+// extend lua default allocate function to limit maximum memory usage.
+#ifdef MYLUA_USE_LUAJIT
+void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
+
+  if (nsize == 0) {
+    return mylua_area->old_allocf(mylua_area->old_allocd, ptr, osize, nsize);
+  }
+
+  mylua_area->lua_memory_usage += nsize - osize;
+  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
+    return NULL;
+  }
+
+  return mylua_area->old_allocf(mylua_area->old_allocd, ptr, osize, nsize);
+}
+#else
+void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
+  mylua_area->lua_memory_usage += nsize - osize;
+  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
+    return NULL;
+  }
+
+  return realloc(ptr, nsize);
+}
+#endif
+
+
+#ifdef MYLUA_USE_LUAJIT
+lua_State *mylua_newstate(lua_Alloc f, MYLUA_AREA *mylua_area) {
+  lua_State *lua = luaL_newstate();
+  mylua_area->old_allocf = lua_getallocf(lua, &mylua_area->old_allocd);
+  lua_setallocf(lua, f, mylua_area);
+  return lua;
+}
+#else
+lua_State *mylua_newstate(lua_Alloc f, MYLUA_AREA *mylua_area) {
+  return lua_newstate(f, mylua_area);
+}
+#endif
 
 
 void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
@@ -112,7 +186,7 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
 
   mylua_area->lua_memory_limit_bytes = 1024 * 1024;
   mylua_area->lua_memory_usage = 0;
-  mylua_area->lua = lua_newstate(mylua_l_alloc, mylua_area);
+  mylua_area->lua = mylua_newstate(mylua_l_alloc, mylua_area);
   if (mylua_area->lua); else goto err;
   if (lua_cpcall(mylua_area->lua, mylua_openlibs, 0)) goto err;
 
@@ -403,26 +477,6 @@ KEY *mylua_index_init(TABLE *table, const char *name, bool sorted) {
     }
   }
   return NULL;
-}
-
-
-//======================================
-// lua allocate function
-
-// extend lua default allocate function to limit maximum memory usage.
-void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
-  if (nsize == 0) {
-    free(ptr);
-    return NULL;
-  }
-
-  MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
-  mylua_area->lua_memory_usage += nsize - osize;
-  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
-    return NULL;
-  }
-
-  return realloc(ptr, nsize);
 }
 
 
