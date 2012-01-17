@@ -117,17 +117,9 @@ typedef struct st_mylua_area {
 } MYLUA_AREA;
 
 
-//======================================
-// lua allocate function
-
-// extend lua default allocate function to limit maximum memory usage.
-#ifdef MYLUA_USE_LUAJIT
+// extend lua (or luajit) default allocate function to limit maximum memory usage.
 void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
-
-  if (nsize == 0) {
-    return mylua_area->old_allocf(mylua_area->old_allocd, ptr, osize, nsize);
-  }
 
   mylua_area->lua_memory_usage += nsize - osize;
   if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
@@ -136,36 +128,14 @@ void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
 
   return mylua_area->old_allocf(mylua_area->old_allocd, ptr, osize, nsize);
 }
-#else
-void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
-  if (nsize == 0) {
-    free(ptr);
-    return NULL;
-  }
-
-  MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
-  mylua_area->lua_memory_usage += nsize - osize;
-  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
-    return NULL;
-  }
-
-  return realloc(ptr, nsize);
-}
-#endif
 
 
-#ifdef MYLUA_USE_LUAJIT
-lua_State *mylua_newstate(lua_Alloc f, MYLUA_AREA *mylua_area) {
-  lua_State *lua = luaL_newstate();
+int mylua_setallocf(lua_State *lua) {
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, 1);
   mylua_area->old_allocf = lua_getallocf(lua, &mylua_area->old_allocd);
-  lua_setallocf(lua, f, mylua_area);
-  return lua;
+  lua_setallocf(lua, mylua_l_alloc, mylua_area);
+  return 0;
 }
-#else
-lua_State *mylua_newstate(lua_Alloc f, MYLUA_AREA *mylua_area) {
-  return lua_newstate(f, mylua_area);
-}
-#endif
 
 
 void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
@@ -186,8 +156,9 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
 
   mylua_area->lua_memory_limit_bytes = 1024 * 1024;
   mylua_area->lua_memory_usage = 0;
-  mylua_area->lua = mylua_newstate(mylua_l_alloc, mylua_area);
+  mylua_area->lua = luaL_newstate();
   if (mylua_area->lua); else goto err;
+  if (lua_cpcall(mylua_area->lua, mylua_setallocf, mylua_area)) goto err;
   if (lua_cpcall(mylua_area->lua, mylua_openlibs, 0)) goto err;
 
   mylua_area->keybuf = (uchar *)mylua_xmalloc(sizeof(uchar) * MYLUA_KEYBUF_SIZE);
