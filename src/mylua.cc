@@ -14,6 +14,7 @@
 
 //======================================
 // cjson decl
+
 extern "C" {
 #define LUA_CJSONLIBNAME "cjson"
 int luaopen_cjson(lua_State *l);
@@ -22,6 +23,7 @@ int luaopen_cjson(lua_State *l);
 
 //======================================
 // mylua decl
+
 #define LUA_MYLUALIBNAME "mylua"
 int luaopen_mylua(lua_State *lua);
 
@@ -71,13 +73,6 @@ static const luaL_Reg lualibs[] = {
   {NULL, NULL}
 };
 
-//FFI:static const luaL_Reg lj_lib_preload[] = {
-//FFI:#if LJ_HASFFI
-//FFI:  { LUA_FFILIBNAME,	luaopen_ffi },
-//FFI:#endif
-//FFI:  { NULL,		NULL }
-//FFI:};
-
 int mylua_openlibs(lua_State *lua) {
   const luaL_Reg *lib = lualibs;
   for (; lib->func; ++lib) {
@@ -85,14 +80,6 @@ int mylua_openlibs(lua_State *lua) {
     lua_pushstring(lua, lib->name);
     lua_call(lua, 1, 0);
   }
-//FFI:#ifdef MYLUA_USE_LUAJIT
-//FFI:  luaL_findtable(lua, LUA_REGISTRYINDEX, "_PRELOAD", sizeof(lj_lib_preload) / sizeof(lj_lib_preload[0]) - 1);
-//FFI:  for (lib = lj_lib_preload; lib->func; lib++) {
-//FFI:    lua_pushcfunction(L, lib->func);
-//FFI:    lua_setfield(L, -2, lib->name);
-//FFI:  }
-//FFI:  lua_pop(L, 1);
-//FFI:#endif
   return 0;
 }
 
