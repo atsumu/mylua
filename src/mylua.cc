@@ -253,6 +253,7 @@ extern "C" my_bool mylua_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
   // check arguments.
   MLI_ASSERT_1(args->arg_count == MYLUA_ARG_COUNT, "Wrong arguments count.");
   for (int i = 0; i < MYLUA_ARG_COUNT; ++i) {
+    MLI_ASSERT_1(args->args[i], "Not constant argument.");
     MLI_ASSERT_1(args->arg_type[i] == mylua_argtype_map[i], "Wrong argument type.");
   }
 
