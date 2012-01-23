@@ -117,7 +117,7 @@ install
   g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC -L /usr/lib \
    -I ./luajit/include/luajit-2.0 -I ./mysql/include -I ./mysql/sql -I ./mysql/regex \
    src/mylua.cc luajit/lib/libluajit-5.1.a lua-cjson/cjson.a \
-   -D MYLUA_USE_LUAJIT
+   -D MYLUA_USE_LUAJIT \
    -o mylua.so
 
   sudo cp mylua.so /usr/lib/mysql/plugin/
