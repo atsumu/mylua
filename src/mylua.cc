@@ -2,11 +2,7 @@
 #define MYSQL_SERVER 1
 #include "mysql_priv.h"
 
-#ifdef MYLUA_USE_LUAJIT
-# include "../luajit/include/luajit-2.0/lua.hpp"
-#else
-# include "../lua/include/lua.hpp"
-#endif
+#include "lua.hpp"
 
 #include <stdio.h>
 #include <string.h>

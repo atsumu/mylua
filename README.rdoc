@@ -1,0 +1,308 @@
+= MyLua
+
+== About
+
+MyLua is a UDF (User-Defined Function) of MySQL.
+It makes possible to fast query on SQL hate access pattern.
+
+
+== Install
+
+MyLua requires Lua (or LuaJIT), Lua CJSON, and MySQL source code.
+
+
+=== Lua
+
+URL:: http://www.lua.org
+tested version:: 5.1.4
+
+make
+
+  cd mylua
+  wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
+  tar zxvf lua-5.1.4.tar.gz
+  mv lua-5.1.4 lua
+  cd lua
+  make linux
+  make local
+
+on x64 system, add "-fPIC" to MYCFLAGS before `make`.
+
+  @@ src/Makefile:99 @@
+  - $(MAKE) all MYCFLAGS=-DLUA_USE_LINUX MYLIBS="-Wl,-E -ldl -lreadline -lhistory -lncurses"
+  + $(MAKE) all MYCFLAGS="-DLUA_USE_LINUX -fPIC" MYLIBS="-Wl,-E -ldl -lreadline -lhistory -lncurses"
+
+
+=== LuaJIT (optional)
+
+URL:: http://luajit.org
+tested versoin:: 2.0.0-beta9
+
+make
+
+  cd mylua
+  wget http://luajit.org/download/LuaJIT-2.0.0-beta9.tar.gz
+  tar zxvf LuaJIT-2.0.0-beta9.tar.gz
+  mv LuaJIT-2.0.0-beta9 luajit
+  cd luajit
+  make
+  make install PREFIX=~/mylua/luajit/LuaJIT-2.0.0-beta9
+  # (set PREFIX to your luajit directory)
+
+on x64 system, add "-fPIC" to MYCFLAGS before `make`.
+
+  @@ src/Makefile:198 @@
+  - STATIC_CC = $(CROSS)$(CC)
+  + STATIC_CC = $(CROSS)$(CC) -fPIC
+
+
+=== Lua CJSON
+
+URL:: http://www.kyne.com.au/~mark/software/lua-cjson.php
+tested version:: 1.0.4
+
+make
+
+  cd mylua
+  wget http://www.kyne.com.au/~mark/software/download/lua-cjson-1.0.4.tar.gz
+  tar zxvf lua-cjson-1.0.4.tar.gz
+  mv lua-cjson-1.0.4 lua-cjson
+  cd lua-cjson
+  env LUA_INCLUDE_DIR=../lua/include LUA_LIB_DIR=../lua/lib make
+  # (if failed, then do `make clean` before retry.)
+  # (if locale error on your system, then use lua-cjson-1.0.3) 
+  ar rv cjson.a lua_cjson.o strbuf.o
+
+REF: http://www.hi-ho.ne.jp/babaq/linux/libtips.html (japanese)
+
+
+=== MySQL
+
+URL:: http://www.mysql.com
+tested version:: 5.1.41
+
+configure
+
+  cd mylua
+  wget http://downloads.mysql.com/archives/mysql-5.1/mysql-5.1.41.tar.gz
+  tar zxvf mysql-5.1.41.tar.gz
+  mv mysql-5.1.41 mysql
+  cd mysql
+  ./configure
+  cp include/config.h include/my_config.h
+
+
+=== MyLua
+
+check directory tree is like this.
+
+  + mylua/
+   + lua/
+   + luajit/
+   + lua-cjson/
+   + mysql/
+   ... and etc
+
+install
+
+  cd mylua
+
+  # if use lua,
+  g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC -L /usr/lib \
+   -I ./lua/include/ -I ./mysql/include -I ./mysql/sql -I ./mysql/regex \
+   src/mylua.cc lua/lib/liblua.a lua-cjson/cjson.a \
+   -o mylua.so
+
+  # else if use luajit,
+  g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC -L /usr/lib \
+   -I ./luajit/include/luajit-2.0 -I ./mysql/include -I ./mysql/sql -I ./mysql/regex \
+   src/mylua.cc luajit/lib/libluajit-5.1.a lua-cjson/cjson.a \
+   -D MYLUA_USE_LUAJIT
+   -o mylua.so
+
+  sudo cp mylua.so /usr/lib/mysql/plugin/
+  mysql -u root -e "create function mylua returns string soname 'mylua.so'" -p
+
+
+== Sample
+
+=== prepare table
+
+  $ mysql -u localuser localuser -e '
+    CREATE TABLE timeline (
+      user_id   int unsigned NOT NULL,
+      status_id int unsigned NOT NULL,
+      PRIMARY KEY (status_id),
+      KEY user_id (user_id, status_id)
+    ) ENGINE=InnoDB;
+
+    INSERT timeline (user_id, status_id)
+    VALUES (1,11),(1,12),(2,21),(3,31),(3,32),(3,33),(5,51);
+  '
+
+=== query
+
+  $ mysql -u localuser -e '
+    SELECT mylua('\''
+      local t = {};
+      mylua.init_table("localuser", "timeline", "user_id", "user_id", "status_id");
+      mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, mylua.arg.uid, mylua.arg.sid);
+      table.insert(t, { mylua.val_int("user_id"), mylua.val_int("status_id") });
+      mylua.index_next();
+      table.insert(t, { mylua.val_int("user_id"), mylua.val_int("status_id") });
+      return t;
+    '\'', '\''{"uid":3,"sid":32}'\'');
+  ' -p
+
+=== output (json)
+
+  [[3,32],[3,33]]
+
+
+== Reference Manual
+
+=== UDF
+
+[MYLUA(string lua_code, string json_arg)]
+
+execute *lua_code* with argument *json_arg*.
+
+  # sample
+  mysql> SELECT mylua('return mylua.arg.foo', '{"foo":3}') AS json;
+  +-----------------------------+
+  | json                        |
+  +-----------------------------+
+  | {"is_error":false,"data":3} |
+  +-----------------------------+
+  1 row in set (0.00 sec)
+
+
+=== Lua interface
+
+[mylua.init_table(string database, string table, string index, string field1, string field2, ...)]
+
+init table for index search.
+field(N) should be part of index.
+
+
+[mylua.index_read_map(rkey, value1, value2, ...)]
+
+index search.
+rkey is below.
+* mylua.HA_READ_KEY_EXACT
+* mylua.HA_READ_KEY_OR_NEXT
+* mylua.HA_READ_KEY_OR_PREV
+* mylua.HA_READ_AFTER_KEY
+* mylua.HA_READ_BEFORE_KEY
+* mylua.HA_READ_PREFIX
+* mylua.HA_READ_PREFIX_LAST
+* mylua.HA_READ_PREFIX_LAST_OR_PREV
+* mylua.HA_READ_MBR_CONTAIN
+* mylua.HA_READ_MBR_INTERSECT
+* mylua.HA_READ_MBR_WITHIN
+* mylua.HA_READ_MBR_DISJOINT
+* mylua.HA_READ_MBR_EQUAL
+
+
+[mylua.index_prev()]
+
+search previous row from index.
+
+
+[mylua.index_next()]
+
+search next row from index.
+
+
+[mylua.val_int(string field)]
+
+get current value of *field*.
+
+  # sample
+  
+  mysql> SHOW CREATE TABLE mylua_test\G
+  *************************** 1. row ***************************
+         Table: mylua_test
+  Create Table: CREATE TABLE `mylua_test` (
+    `uid` int(11) NOT NULL,
+    `sid` int(11) NOT NULL,
+    PRIMARY KEY (`sid`),
+    KEY `uid` (`uid`,`sid`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+  1 row in set (0.00 sec)
+
+  mysql> SELECT * FROM mylua_test ORDER BY uid, sid LIMIT 10;
+  +-----+-------+
+  | uid | sid   |
+  +-----+-------+
+  |   1 |     1 |
+  |   1 |    10 |
+  |   1 |   100 |
+  |   1 |  1000 |
+  |   1 | 10000 |
+  |   2 |     2 |
+  |   2 |    20 |
+  |   2 |   200 |
+  |   2 |  2000 |
+  |   2 | 20000 |
+  +-----+-------+
+  10 rows in set (0.00 sec)
+
+  mysql> SELECT mylua('
+    local t = {}
+    mylua.init_table("localuser", "mylua_test", "uid", "uid", "sid")
+    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, 1, 900)
+    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    mylua.index_next()
+    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    mylua.index_next()
+    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    return t
+  ', '{}') AS json;
+  +------------------------------------------------------+
+  | json                                                 |
+  +------------------------------------------------------+
+  | {"is_error":false,"data":[[1,1000],[1,10000],[2,2]]} |
+  +------------------------------------------------------+
+  1 row in set (0.00 sec)
+
+
+[mylua.set_memory_limit_bytes(int limit)]
+
+set lua memory limit to *limit*.
+default is 1MB.
+
+
+[mylua.get_memory_limit_bytes()]
+
+get current lua memory limit.
+
+
+== License
+
+New BSD License.
+
+  Copyright (c) 2011, Atsumu Tanaka <atsumu.dev@gmail.com>
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+     * Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+
+     * Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
