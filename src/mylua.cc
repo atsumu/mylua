@@ -201,7 +201,7 @@ static Item_result mylua_argtype_map[MYLUA_ARG_COUNT] = {
 
 void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const char *msg2)
 {
-  const char *json_pre = "{\"is_error\":true,\"message\":\"";
+  const char *json_pre = "{\"ok\":false,\"message\":\"";
   const char *json_suf = "\"}";
   int json_pre_len = strlen(json_pre);
   int json_suf_len = strlen(json_suf);
@@ -315,8 +315,8 @@ int pmylua(lua_State *lua) {
 
   lua_newtable(lua);
 
-  lua_pushstring(lua, "is_error");
-  lua_pushboolean(lua, 0);
+  lua_pushstring(lua, "ok");
+  lua_pushboolean(lua, 1);
   lua_settable(lua, -3);
 
   lua_pushstring(lua, "data");
