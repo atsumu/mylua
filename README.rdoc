@@ -203,15 +203,33 @@ rkey is below.
 * mylua.HA_READ_MBR_DISJOINT
 * mylua.HA_READ_MBR_EQUAL
 
+if matched, then returns *0*.
+
+if not matched, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
+
+if other errors, then returns <b>not 0 integer</b>.
+
 
 [mylua.index_prev()]
 
 search previous row from index.
 
+if no errors, then returns *0*.
+
+if not found, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
+
+if other errors, then returns <b>not 0 integer</b>.
+
 
 [mylua.index_next()]
 
 search next row from index.
+
+if no errors, then returns *0*.
+
+if not found, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
+
+if other errors, then returns <b>not 0 integer</b>.
 
 
 [mylua.val_int(string field)]

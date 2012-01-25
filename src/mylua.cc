@@ -571,8 +571,8 @@ static int mylua_index_read_map(lua_State *lua) {
     offset += mylua_area->key->key_part[i].length;
   }
 
-  int read_re = table->file->index_read_map(table->record[0], mylua_area->keybuf, mylua_area->keypart_map, ha_read_prefix);
-  lua_pushboolean(lua, read_re == 0);
+  int error = table->file->index_read_map(table->record[0], mylua_area->keybuf, mylua_area->keypart_map, ha_read_prefix);
+  lua_pushinteger(lua, error);
 
   mylua_area->index_read_map_done = 1;
 
@@ -733,6 +733,7 @@ int luaopen_mylua(lua_State *lua) {
   lua_pushinteger(lua, name); \
   lua_setfield(lua, -2, # name);
 
+  // first argument of mylua.index_read_map
   LUAOPEN_MYLUA_SETCONST(HA_READ_KEY_EXACT);
   LUAOPEN_MYLUA_SETCONST(HA_READ_KEY_OR_NEXT);
   LUAOPEN_MYLUA_SETCONST(HA_READ_KEY_OR_PREV);
@@ -747,6 +748,10 @@ int luaopen_mylua(lua_State *lua) {
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_DISJOINT);
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_EQUAL);
 
+  // return value of mylua.index_read_map
+  LUAOPEN_MYLUA_SETCONST(HA_ERR_KEY_NOT_FOUND);
+
+  // return value of mylua.index_prev and mylua.index_next
   LUAOPEN_MYLUA_SETCONST(HA_ERR_END_OF_FILE);
 
   // return mylua table.
