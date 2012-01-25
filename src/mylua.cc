@@ -451,6 +451,12 @@ static int mylua_init_table(lua_State *lua) {
   int argc = lua_gettop(lua);
   MLIT_ASSERT(argc >= 4);
 
+  while (++argi <= argc) {
+    luaL_checktype(lua, argi, LUA_TSTRING);
+  }
+
+  argi = 0;
+
   const char *db = lua_tostring(lua, ++argi);
   const char *tbl = lua_tostring(lua, ++argi);
   const char *idx = lua_tostring(lua, ++argi);
@@ -524,34 +530,39 @@ static int mylua_index_read_map(lua_State *lua) {
   TABLE_LIST *table_list = mylua_area->table_list;
   TABLE *table = table_list->table;
 
-  ha_rkey_function ha_read_prefix = (ha_rkey_function)lua_tointeger(lua, ++argi);
+  luaL_checktype(lua, ++argi, LUA_TNUMBER);
+  ha_rkey_function ha_read_prefix = (ha_rkey_function)lua_tointeger(lua, argi);
   MLIRM_ASSERT(HA_READ_KEY_EXACT <= ha_read_prefix && ha_read_prefix <= HA_READ_MBR_EQUAL);
 
   size_t offset = 0;
   for (int i = 0; ++argi <= argc; ++i) {
-    const char *val = lua_tostring(lua, argi);
+    int type = lua_type(lua, argi);
+    MLIRM_ASSERT(type == LUA_TNUMBER);
+    longlong ll = lua_tointeger(lua, argi);
     switch (mylua_area->key->key_part[i].type) {
     //case HA_KEYTYPE_TEXT:
     //case HA_KEYTYPE_BINARY:
     //  break;
     case HA_KEYTYPE_SHORT_INT:
     case HA_KEYTYPE_USHORT_INT:
-      int2store(mylua_area->keybuf + offset, atoll(val));
+      int2store(mylua_area->keybuf + offset, ll);
       break;
     case HA_KEYTYPE_LONG_INT:
+      int4store(mylua_area->keybuf + offset, ll);
+      break;
     case HA_KEYTYPE_ULONG_INT:
-      int4store(mylua_area->keybuf + offset, atoll(val));
+      int4store(mylua_area->keybuf + offset, ll);
       break;
     case HA_KEYTYPE_LONGLONG:
     case HA_KEYTYPE_ULONGLONG:
-      int8store(mylua_area->keybuf + offset, atoll(val));
+      int8store(mylua_area->keybuf + offset, ll);
       break;
     case HA_KEYTYPE_INT24:
     case HA_KEYTYPE_UINT24:
-      int3store(mylua_area->keybuf + offset, atoll(val));
+      int3store(mylua_area->keybuf + offset, ll);
       break;
     case HA_KEYTYPE_INT8:
-      *((char *)(mylua_area->keybuf + offset)) = atoll(val);
+      *((char *)(mylua_area->keybuf + offset)) = ll;
       break;
     default:
       MLIRM_ASSERT(0 && mylua_area->key->key_part[i].type);
@@ -645,7 +656,8 @@ static int mylua_val_int(lua_State *lua) {
   TABLE_LIST *table_list = mylua_area->table_list;
   TABLE *table = table_list->table;
 
-  const char *fld = lua_tostring(lua, ++argi);
+  luaL_checktype(lua, ++argi, LUA_TSTRING);
+  const char *fld = lua_tostring(lua, argi);
   Field *field = mylua_get_field(table, fld);
   MLVI_ASSERT(field);
 
@@ -671,7 +683,8 @@ static int mylua_set_memory_limit_bytes(lua_State *lua) {
   lua_getfield(lua, LUA_REGISTRYINDEX, "mylua_area");
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, -1);
 
-  mylua_area->lua_memory_limit_bytes = lua_tointeger(lua, ++argi);
+  luaL_checktype(lua, ++argi, LUA_TNUMBER);
+  mylua_area->lua_memory_limit_bytes = lua_tointeger(lua, argi);
 
   return 0;
 }
@@ -733,6 +746,8 @@ int luaopen_mylua(lua_State *lua) {
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_WITHIN);
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_DISJOINT);
   LUAOPEN_MYLUA_SETCONST(HA_READ_MBR_EQUAL);
+
+  LUAOPEN_MYLUA_SETCONST(HA_ERR_END_OF_FILE);
 
   // return mylua table.
   return 1;
