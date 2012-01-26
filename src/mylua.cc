@@ -69,6 +69,7 @@ static const luaL_Reg lualibs[] = {
   {NULL, NULL}
 };
 
+
 int mylua_openlibs(lua_State *lua) {
   const luaL_Reg *lib = lualibs;
   for (; lib->func; ++lib) {
@@ -88,6 +89,7 @@ typedef struct st_mylua_area {
   size_t lua_memory_limit_bytes;
   uchar *keybuf;
   key_part_map keypart_map;
+  uint using_key_parts;
   KEY *key;
   char *result;
   size_t result_size;
@@ -146,6 +148,7 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
 
   mylua_area->keybuf = (uchar *)mylua_xmalloc(sizeof(uchar) * MYLUA_KEYBUF_SIZE);
   mylua_area->keypart_map = 0;
+  mylua_area->using_key_parts = 0;
   mylua_area->key = NULL;
 
   mylua_area->result_size = sizeof(char) * result_strlen;
@@ -491,8 +494,9 @@ static int mylua_init_table(lua_State *lua) {
   mylua_area->index_init_done = 1;
   MLIT_ASSERT(key->key_parts >= fld_c);
   mylua_area->key = key;
-  memset(mylua_area->keybuf, 0, key->key_length);
+  mylua_area->using_key_parts = fld_c;
   mylua_area->keypart_map = (1 << fld_c) - 1;
+  memset(mylua_area->keybuf, 0, key->key_length);
 
   // re-loop, for avoid memory allocation.
   argi = fld_0;
@@ -525,7 +529,7 @@ static int mylua_index_read_map(lua_State *lua) {
   lua_getfield(lua, LUA_REGISTRYINDEX, "mylua_area");
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, -1);
   MLIRM_ASSERT(mylua_area->init_table_done);
-  MLIRM_ASSERT(mylua_area->key->key_parts == fld_c);
+  MLIRM_ASSERT(mylua_area->using_key_parts == fld_c);
 
   TABLE_LIST *table_list = mylua_area->table_list;
   TABLE *table = table_list->table;
