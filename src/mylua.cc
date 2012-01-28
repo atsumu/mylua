@@ -107,7 +107,7 @@ void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
 
   mylua_area->lua_memory_usage += nsize - osize;
-  if (mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
+  if (nsize != 0 && mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
     return NULL;
   }
 
