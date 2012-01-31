@@ -39,9 +39,7 @@ void *mylua_xrealloc(void *oldmem, size_t size) {
 
 
 void mylua_xfree(void *p) {
-  if (p) {
-    free(p);
-  }
+  if (p) free(p);
 }
 
 
@@ -107,7 +105,7 @@ void *mylua_l_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)ud;
 
   mylua_area->lua_memory_usage += nsize - osize;
-  if (nsize != 0 && mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
+  if (nsize != 0 && nsize > osize && mylua_area->lua_memory_usage > mylua_area->lua_memory_limit_bytes) {
     return NULL;
   }
 
@@ -125,7 +123,13 @@ int mylua_setallocf(lua_State *lua) {
 
 void mylua_area_dealloc(MYLUA_AREA *mylua_area) {
   if (mylua_area); else return;
-  if (mylua_area->lua) lua_close(mylua_area->lua);
+  if (mylua_area->lua) {
+    if (mylua_area->old_allocf) {
+      // lua_setallocf do not throw exception.
+      lua_setallocf(mylua_area->lua, mylua_area->old_allocf, mylua_area->old_allocd);
+    }
+    lua_close(mylua_area->lua);
+  }
   mylua_xfree(mylua_area->keybuf);
   mylua_xfree(mylua_area->result);
   mylua_xfree(mylua_area);
@@ -139,6 +143,8 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   if (mylua_area); else goto err;
   memset(mylua_area, 0, sizeof(MYLUA_AREA));
 
+  mylua_area->old_allocf = NULL;
+  mylua_area->old_allocd = NULL;
   mylua_area->lua_memory_limit_bytes = 1024 * 1024;
   mylua_area->lua_memory_usage = 0;
   mylua_area->lua = luaL_newstate();

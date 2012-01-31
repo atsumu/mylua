@@ -40,7 +40,7 @@ $test_a[] = test(q(''), q(''), error('lua_cpcall(pmylua): LUA_ERRRUN: Expected v
 //
 $test_a[] = test(q(''), q('{}'), ok());
 $test_a[] = test(q('return 1'), q('{}'), ok(1));
-$test_a[] = test(q('return mylua.arg'), q('{"0":0,"1":1,"foo":"bar"}'), ok(array("foo" => "bar", 1 => 1, 0 => 0)));
+$test_a[] = test(q('return mylua.arg'), q('{"0":[0,1,true,false,"foo"]}'), ok(array("0" => array(0, 1, true, false, "foo"))));
 
 
 // mylua.get_memory_limit_bytes
