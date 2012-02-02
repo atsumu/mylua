@@ -80,7 +80,6 @@ function prepare_lua() {
     my_exec("tar zxvf lua-5.1.4.tar.gz");
     my_exec("ln -s lua-5.1.4 lua");
     my_cd("lua");
-    my_exec("cd lua");
     my_exec("sed -i 's/MYCFLAGS=-DLUA_USE_POSIX/MYCFLAGS=\"-DLUA_USE_POSIX -fPIC\"/g' src/Makefile");
     my_exec("make posix");
     my_exec("make local");
