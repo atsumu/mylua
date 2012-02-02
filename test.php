@@ -1,8 +1,8 @@
 <?php
 
-error_reporting(E_ALL & ~E_NOTICE);
+error_reporting(E_ALL);
 
-$mode = isset($argv[1]) ? $argv[1] : "run";
+$mode = isset($argv[1]) ? $argv[1] : "";
 $host = isset($argv[2]) ? $argv[2] : "localhost";
 $user = isset($argv[3]) ? $argv[3] : "localuser";
 $pass = isset($argv[4]) ? $argv[4] : "localpass";
@@ -416,13 +416,10 @@ $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua
 
 //
 if ($mode === "run") {
-    $re = run($test_a);
-} else if ($mode === "create_table") {
     $re = create_table();
-} else if ($mode === "drop_table") {
-    $re = drop_table();
+    $re = run($test_a);
 } else {
-    print "usage: php mylua.php < run | create_table | drop_table > [ host user pass db ]\n";
+    print "usage: php ".basename(__FILE__)." run [ <host> <user> <pass> <db> ]\n";
     $re = 1;
 }
 
@@ -432,7 +429,7 @@ exit($re);
 //
 function create_table() {
     $re = mysql_query("
-        CREATE TABLE mylua_test (
+        CREATE TEMPORARY TABLE mylua_test (
             uid INT NOT NULL,
             sid INT NOT NULL,
             PRIMARY KEY (sid),
@@ -460,7 +457,7 @@ function create_table() {
     }
 
     $re = mysql_query("
-        CREATE TABLE mylua_test2 (
+        CREATE TEMPORARY TABLE mylua_test2 (
             rid    INT NOT NULL,
             tiny   TINYINT NOT NULL,
             small  SMALLINT NOT NULL,
@@ -504,26 +501,13 @@ function create_table() {
         print "error: ".__FUNCTION__.": (".mysql_errno().") ".mysql_error()."\n";
         return 1;
     }
-    
-    return 0;
-}
 
-function drop_table() {
-    $re = mysql_query("DROP TABLE IF EXISTS mylua_test");
-    if (!$re) {
-        print "error: ".__FUNCTION__.": (".mysql_errno().") ".mysql_error()."\n";
-        return 1;
-    }
-    $re = mysql_query("DROP TABLE IF EXISTS mylua_test2");
-    if (!$re) {
-        print "error: ".__FUNCTION__.": (".mysql_errno().") ".mysql_error()."\n";
-        return 1;
-    }
     return 0;
 }
 
 function run($test_a) {
     foreach ($test_a as $i => $test) {
+        $test['ext'] = isset($test['ext']) ? $test['ext'] : '';
         $v = select_mylua($test['code'], $test['arg'], $test['ext']);
         if (count($v) >= 2) {
             print "\n\ncode:\n";
@@ -553,8 +537,10 @@ function run($test_a) {
             $ret  = summary($v);
             $exp  = summary($test['expect']);
             printf("%4d: ok. code=%-10s arg=%-10s %10s === %-10s", $i, $code, $arg, $ret, $exp);
-            if ($v) {
+            if (isset($v['message'])) {
                 print " ".$v['message'];
+            } else if ($v) {
+                print " ";
             } else {
                 print " mysql_error: (".mysql_errno().") ".mysql_error();
             }
