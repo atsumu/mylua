@@ -13,6 +13,7 @@ $all_command_m = array(
     "prepare_lua_cjson" => array(),
     "prepare_mysql" => array(),
     "prepare_mylua" => array(),
+    "prepare_mylua_with_luajit" => array(),
     "install" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
     "uninstall" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
     "replace" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
