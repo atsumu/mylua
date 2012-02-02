@@ -77,7 +77,7 @@ function prepare() {
 
 function prepare_lua() {
     my_exec("wget http://www.lua.org/ftp/lua-5.1.4.tar.gz");
-    my_exec("tar zxvf lua-5.1.4.tar.gz");
+    my_exec("tar zxf lua-5.1.4.tar.gz");
     my_exec("ln -s lua-5.1.4 lua");
     my_cd("lua");
     my_exec("sed -i 's/MYCFLAGS=-DLUA_USE_POSIX/MYCFLAGS=\"-DLUA_USE_POSIX -fPIC\"/g' src/Makefile");
@@ -88,7 +88,7 @@ function prepare_lua() {
 
 function prepare_luajit() {
     my_exec("wget http://luajit.org/download/LuaJIT-2.0.0-beta9.tar.gz");
-    my_exec("tar zxvf LuaJIT-2.0.0-beta9.tar.gz");
+    my_exec("tar zxf LuaJIT-2.0.0-beta9.tar.gz");
     my_exec("ln -s LuaJIT-2.0.0-beta9 luajit");
     my_cd("luajit");
     my_exec("sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC)/g' src/Makefile");
@@ -99,7 +99,7 @@ function prepare_luajit() {
 
 function prepare_lua_cjson() {
     my_exec("wget http://www.kyne.com.au/~mark/software/download/lua-cjson-1.0.4.tar.gz");
-    my_exec("tar zxvf lua-cjson-1.0.4.tar.gz");
+    my_exec("tar zxf lua-cjson-1.0.4.tar.gz");
     my_exec("ln -s lua-cjson-1.0.4 lua-cjson");
     my_cd("lua-cjson");
     my_exec("env LUA_INCLUDE_DIR=../lua/include LUA_LIB_DIR=../lua/lib make");
@@ -112,7 +112,7 @@ function prepare_mysql() {
     preg_match('/Distrib ([0-9.]+),/u', $output, $version);
     $version = $version[1];
     my_exec("wget http://downloads.mysql.com/archives/mysql-5.1/mysql-{$version}.tar.gz");
-    my_exec("tar zxvf mysql-{$version}.tar.gz");
+    my_exec("tar zxf mysql-{$version}.tar.gz");
     my_exec("ln -s mysql-{$version} mysql");
     my_cd("mysql");
     my_exec("./configure");
