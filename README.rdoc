@@ -23,14 +23,9 @@ make
   tar zxvf lua-5.1.4.tar.gz
   mv lua-5.1.4 lua
   cd lua
-  make linux
+  sed -i 's/MYCFLAGS=-DLUA_USE_POSIX/MYCFLAGS="-DLUA_USE_POSIX -fPIC"/g' src/Makefile
+  make posix
   make local
-
-on x64 system, add "-fPIC" to MYCFLAGS before `make`.
-
-  @@ src/Makefile:99 @@
-  - $(MAKE) all MYCFLAGS=-DLUA_USE_LINUX MYLIBS="-Wl,-E -ldl -lreadline -lhistory -lncurses"
-  + $(MAKE) all MYCFLAGS="-DLUA_USE_LINUX -fPIC" MYLIBS="-Wl,-E -ldl -lreadline -lhistory -lncurses"
 
 
 === LuaJIT (optional)
@@ -45,15 +40,9 @@ make
   tar zxvf LuaJIT-2.0.0-beta9.tar.gz
   mv LuaJIT-2.0.0-beta9 luajit
   cd luajit
+  sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC)/g' src/Makefile
   make
-  make install PREFIX=~/mylua/luajit/LuaJIT-2.0.0-beta9
-  # (set PREFIX to your luajit directory)
-
-on x64 system, add "-fPIC" to MYCFLAGS before `make`.
-
-  @@ src/Makefile:198 @@
-  - STATIC_CC = $(CROSS)$(CC)
-  + STATIC_CC = $(CROSS)$(CC) -fPIC
+  make install PREFIX=`pwd`
 
 
 === Lua CJSON
