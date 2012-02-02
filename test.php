@@ -62,8 +62,7 @@ foreach ($args_invalid as $type => $invalid) {
 
 
 // disabled libraries
-$test_a[] = test(q('os.exit()'), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: [string os.exit()]:1: attempt to index global \'os\' (a nil value)'));
-$test_a[] = test(q('io.flush()'), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: [string io.flush()]:1: attempt to index global \'io\' (a nil value)'));
+$test_a[] = test(q('os.exit()'), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: [string os.exit()]:1: attempt to call field \'exit\' (a nil value)'));
 
 
 // too long argument and return.

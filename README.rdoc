@@ -301,6 +301,24 @@ default is 1MB.
 get current lua memory limit.
 
 
+==== mylua.startclock
+
+os.clock() result at the time of starting query execution.
+
+
+==== mylua.timeout
+
+mylua.startclock + timeout seconds.
+
+default timeout seconds is 60.
+
+mylua.timeout is compared to os.clock() in lua count hook.
+
+if os.clock() greater than mylua.timeout, error is occured.
+
+if using luajit, it does not work well.
+
+
 == License
 
 New BSD License.

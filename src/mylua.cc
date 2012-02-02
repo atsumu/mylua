@@ -53,8 +53,8 @@ static const luaL_Reg lualibs[] = {
   {"", luaopen_base},
   {LUA_LOADLIBNAME, luaopen_package},
   {LUA_TABLIBNAME, luaopen_table},
-  //{LUA_IOLIBNAME, luaopen_io}, // do not load.
-  //{LUA_OSLIBNAME, luaopen_os}, // do not load.
+  {LUA_IOLIBNAME, luaopen_io},
+  {LUA_OSLIBNAME, luaopen_os},
   {LUA_STRLIBNAME, luaopen_string},
   {LUA_MATHLIBNAME, luaopen_math},
   {LUA_DBLIBNAME, luaopen_debug},
@@ -328,6 +328,21 @@ int pmylua(lua_State *lua) {
   lua_pushboolean(lua, 1);
   lua_settable(lua, -3);
 
+  // setup
+  const char *setup = (
+    "os.exit = nil\n"
+    "mylua.startclock = os.clock()\n"
+    "mylua.timeout = mylua.startclock + 60\n"
+    "debug.sethook(function () if os.clock() >= mylua.timeout then error('timeout: ' .. os.clock() - mylua.startclock .. ' sec.') end end, '', 100000)\n" // prevent endless loop. (not certain on luajit)
+    "if jit then jit.opt.start('hotloop=1000', 'hotexit=1000') end\n"
+    );
+  if (luaL_loadstring(lua, setup)) {
+    lua_error(lua);
+    return 0;
+  }
+  lua_call(lua, 0, 0);
+
+  //
   lua_pushstring(lua, "data");
   if (luaL_loadstring(lua, proc)) {
     lua_error(lua);
