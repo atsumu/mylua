@@ -59,7 +59,8 @@ make
   cd lua-cjson
   env LUA_INCLUDE_DIR=../lua/include LUA_LIB_DIR=../lua/lib make
   # (if failed, then do `make clean` before retry.)
-  # (if locale error on your system, then use lua-cjson-1.0.3) 
+  # (if locale error has occured, then comment out -DUSE_POSIX_USELOCALE and retry make)
+  # sed -i 's/CFLAGS_EXTRA =      -DUSE_POSIX_USELOCALE/#CFLAGS_EXTRA =      -DUSE_POSIX_USELOCALE/g' Makefile
   ar rv cjson.a lua_cjson.o strbuf.o
 
 REF: http://www.hi-ho.ne.jp/babaq/linux/libtips.html (japanese)
