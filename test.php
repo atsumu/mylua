@@ -160,7 +160,7 @@ foreach ($args_invalid as $type => $invalid) {
         if ($i == 0) {
             $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: [string ...]:3: bad argument #1 to \'index_read_map\' (number expected, got '.$type.')'));
         } else {
-            $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: type == LUA_TNUMBER'));
+            $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: lua_type(lua, argi) == LUA_TNUMBER'));
         }
     }
 }
@@ -175,7 +175,7 @@ foreach ($args_invalid as $type => $invalid) {
             mylua.init_table('{$db}', 'mylua_test', 'uid', 'uid', 'sid')
             mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, {$copy[1]}, {$copy[2]})
         ";
-        $test_a[] = test(q($code), q('{}'), ok());
+        $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: -0x7fffffff <= dbl && dbl <= 0x7fffffff'));
     }
 }
 
@@ -368,7 +368,7 @@ $code = '
 ';
 $test_a[] = test(q($code), q('{}'), ok(1));
 
-$key_a = array('tiny' => 10, 'small' => 100, 'medium' => 1000, 'big' => 10000, 'uint' => 11);
+$key_a = array('stiny' => 10, 'ssmall' => 100, 'smedium' => 1000, 'sbig' => 10000, 'sint' => 11, 'utiny' => 10, 'usmall' => 100, 'umedium' => 1000, 'ubig' => 10000, 'uint' => 11);
 foreach ($key_a as $key => $res) {
     $code = '
         mylua.init_table("'.$db.'", "mylua_test2", "'.$key.'", "'.$key.'")
@@ -379,25 +379,18 @@ foreach ($key_a as $key => $res) {
 }
 
 $code = '
-    mylua.init_table("'.$db.'", "mylua_test2", "big", "big")
-    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, 1)
-    return mylua.val_int("rid")
+    mylua.init_table("'.$db.'", "mylua_test2", "txt", "txt")
+    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, "txt1")
+    return mylua.val_int("txt")
 ';
-$test_a[] = test(q($code), q('{}'), ok(1));
+$test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: 0 && mylua_area->key->key_part[i].type'));
 
 $code = '
-    mylua.init_table("'.$db.'", "mylua_test2", "PRIMARY", "rid")
-    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, 1)
-    return mylua.val_int("rid")
+    mylua.init_table("'.$db.'", "mylua_test2", "blb", "blb")
+    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, "blb1")
+    return mylua.val_int("blb")
 ';
-$test_a[] = test(q($code), q('{}'), ok(1));
-
-$code = '
-    mylua.init_table("'.$db.'", "mylua_test2", "str", "str")
-    mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, "str1")
-    return mylua.val_int("str")
-';
-$test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: type == LUA_TNUMBER'));
+$test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: 0 && mylua_area->key->key_part[i].type'));
 
 //// test failed. nullable key is not supported yet.
 //$code = '
@@ -459,20 +452,32 @@ function create_table() {
     $re = mysql_query("
         CREATE TEMPORARY TABLE mylua_test2 (
             rid    INT NOT NULL,
-            tiny   TINYINT NOT NULL,
-            small  SMALLINT NOT NULL,
-            medium MEDIUMINT NOT NULL,
-            big    BIGINT NOT NULL,
-            uint   INT UNSIGNED NOT NULL,
-            str    TEXT NOT NULL,
+            stiny   TINYINT NOT NULL,
+            ssmall  SMALLINT NOT NULL,
+            smedium MEDIUMINT NOT NULL,
+            sbig    BIGINT NOT NULL,
+            sint   INT NOT NULL,
+            txt    TEXT NOT NULL,
+            utiny   TINYINT NOT NULL,
+            usmall  SMALLINT NOT NULL,
+            umedium MEDIUMINT NOT NULL,
+            ubig    BIGINT NOT NULL,
+            uint   INT NOT NULL,
+            blb    BLOB NOT NULL,
             nil    INT NULL,
             PRIMARY KEY (rid),
-            KEY (tiny),
-            KEY (small),
-            KEY (medium),
-            KEY (big),
+            KEY (stiny),
+            KEY (ssmall),
+            KEY (smedium),
+            KEY (sbig),
+            KEY (sint),
+            KEY (txt(10)),
+            KEY (utiny),
+            KEY (usmall),
+            KEY (umedium),
+            KEY (ubig),
             KEY (uint),
-            KEY (str(10)),
+            KEY (blb(10)),
             KEY (nil)
         ) Engine=MyISAM;
     ");
@@ -484,17 +489,23 @@ function create_table() {
     for ($rid = 1; $rid <= 9; ++$rid) {
         $b = array();
         $b["rid"] = intval($rid);
-        $b["tiny"] = intval($rid * 10);
-        $b["small"] = intval($rid * 100);
-        $b["meidum"] = intval($rid * 1000);
-        $b["big"] = intval($rid * 10000);
+        $b["stiny"] = intval($rid * 10);
+        $b["ssmall"] = intval($rid * 100);
+        $b["smeidum"] = intval($rid * 1000);
+        $b["sbig"] = intval($rid * 10000);
+        $b["sint"] = intval($rid * 10 + 1);
+        $b["txt"] = q("txt".$rid);
+        $b["utiny"] = intval($rid * 10);
+        $b["usmall"] = intval($rid * 100);
+        $b["umeidum"] = intval($rid * 1000);
+        $b["ubig"] = intval($rid * 10000);
         $b["uint"] = intval($rid * 10 + 1);
-        $b["str"] = q("str".$rid);
+        $b["blb"] = q("blb".$rid);
         $b["nil"] = $rid % 2 ? $rid : "NULL";
         $a[] = "(".implode(",", $b).")";
     }
     $re = mysql_query("
-        INSERT mylua_test2 (rid, tiny, small, medium, big, uint, str, nil)
+        INSERT mylua_test2 (rid, stiny, ssmall, smedium, sbig, sint, txt, utiny, usmall, umedium, ubig, uint, blb, nil)
         VALUES ".implode(",", $a)."
     ");
     if (!$re) {

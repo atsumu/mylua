@@ -561,33 +561,101 @@ static int mylua_index_read_map(lua_State *lua) {
 
   size_t offset = 0;
   for (int i = 0; ++argi <= argc; ++i) {
-    int type = lua_type(lua, argi);
-    MLIRM_ASSERT(type == LUA_TNUMBER);
-    longlong ll = lua_tointeger(lua, argi);
+    double dbl;
+    longlong ll;
+    const char *str;
+    uint16 partlen;
     switch (mylua_area->key->key_part[i].type) {
-    //case HA_KEYTYPE_TEXT:
-    //case HA_KEYTYPE_BINARY:
-    //  break;
+    case HA_KEYTYPE_TEXT: 
+      partlen = mylua_area->key->key_part[i].length;
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TSTRING);
+      size_t len;
+      str = lua_tolstring(lua, argi, &len);
+      MLIRM_ASSERT(len <= partlen);
+      memcpy(mylua_area->keybuf + offset, str, len);
+      memset(mylua_area->keybuf + offset + len, 0, partlen - len);
+      break;
+    case HA_KEYTYPE_BINARY:
+      partlen = mylua_area->key->key_part[i].length;
+      if (partlen == 1) {
+        switch (lua_type(lua, argi)) {
+        case LUA_TNUMBER:
+          dbl = lua_tonumber(lua, argi);
+          MLIRM_ASSERT(0 <= dbl && dbl <= 0xff);
+          *((char *)(mylua_area->keybuf + offset)) = (longlong)dbl;
+          break;
+        case LUA_TSTRING:
+          size_t len;
+          str = lua_tolstring(lua, argi, &len);
+          MLIRM_ASSERT(len == 1);
+          *((char *)(mylua_area->keybuf + offset)) = str[0];
+          break;
+        default:
+          MLIRM_ASSERT(0 && lua_type(lua, argi));
+          break;
+        }
+      } else {
+        MLIRM_ASSERT(lua_type(lua, argi) == LUA_TSTRING);
+        size_t len;
+        str = lua_tolstring(lua, argi, &len);
+        MLIRM_ASSERT(len <= partlen);
+        memcpy(mylua_area->keybuf + offset, str, len);
+        memset(mylua_area->keybuf + offset + len, 0, partlen - len);
+      }
+      break;
     case HA_KEYTYPE_SHORT_INT:
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(-0x7fff <= dbl && dbl <= 0x7fff);
+      int2store(mylua_area->keybuf + offset, (longlong)dbl);
+      break;
     case HA_KEYTYPE_USHORT_INT:
-      int2store(mylua_area->keybuf + offset, ll);
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(0 <= dbl && dbl <= 0xffff);
+      int2store(mylua_area->keybuf + offset, (longlong)dbl);
       break;
     case HA_KEYTYPE_LONG_INT:
-      int4store(mylua_area->keybuf + offset, ll);
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(-0x7fffffff <= dbl && dbl <= 0x7fffffff);
+      int4store(mylua_area->keybuf + offset, (longlong)dbl);
       break;
     case HA_KEYTYPE_ULONG_INT:
-      int4store(mylua_area->keybuf + offset, ll);
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(0 <= dbl && dbl <= 0xffffffff);
+      int4store(mylua_area->keybuf + offset, (longlong)dbl);
       break;
     case HA_KEYTYPE_LONGLONG:
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      ll = lua_tointeger(lua, argi);
+      //MLIRM_ASSERT(-0x7fffffffffffffffLL <= ll && ll <= 0x7fffffffffffffffLL);
+      int8store(mylua_area->keybuf + offset, ll);
+      break;
     case HA_KEYTYPE_ULONGLONG:
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      ll = lua_tointeger(lua, argi);
+      //MLIRM_ASSERT(0ULL <= (ulonglong)ll && (ulonglong)ll <= 0xffffffffffffffffULL);
       int8store(mylua_area->keybuf + offset, ll);
       break;
     case HA_KEYTYPE_INT24:
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(-0x7fffff < dbl && dbl < 0x7fffff);
+      int3store(mylua_area->keybuf + offset, (longlong)dbl);
+      break;
     case HA_KEYTYPE_UINT24:
-      int3store(mylua_area->keybuf + offset, ll);
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(0 < dbl && dbl < 0xffffff);
+      int3store(mylua_area->keybuf + offset, (longlong)dbl);
       break;
     case HA_KEYTYPE_INT8:
-      *((char *)(mylua_area->keybuf + offset)) = ll;
+      MLIRM_ASSERT(lua_type(lua, argi) == LUA_TNUMBER);
+      dbl = lua_tonumber(lua, argi);
+      MLIRM_ASSERT(-0x7f < dbl && dbl < 0x7f);
+      *((char *)(mylua_area->keybuf + offset)) = (longlong)dbl;
       break;
     default:
       MLIRM_ASSERT(0 && mylua_area->key->key_part[i].type);
