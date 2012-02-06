@@ -153,7 +153,7 @@ install
 
 === UDF
 
-==== MYLUA(string lua_code, string json_arg)
+==== string MYLUA(string lua_code, string json_arg)
 
 execute *lua_code* with argument *json_arg*.
 
@@ -174,13 +174,13 @@ data:: if no error, then assgined value returned from *lua_code*.
 
 === Lua interface
 
-==== mylua.init_table(string database, string table, string index, string field1, string field2, ...)
+==== void mylua.init_table(string database, string table, string index, string field1, string field2, ...)
 
 init table for index search.
 field(N) should be part of index.
 
 
-==== mylua.index_read_map(rkey, value1, value2, ...)
+==== int mylua.index_read_map(rkey, value1, value2, ...)
 
 index search.
 rkey is below.
@@ -205,7 +205,7 @@ if not matched, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
 if other errors, then returns <b>not 0 integer</b>.
 
 
-==== mylua.index_prev()
+==== int mylua.index_prev()
 
 search previous row from index.
 
@@ -216,7 +216,7 @@ if not found, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
 if other errors, then returns <b>not 0 integer</b>.
 
 
-==== mylua.index_next()
+==== int mylua.index_next()
 
 search next row from index.
 
@@ -227,7 +227,7 @@ if not found, then returns *mylua.HA_ERR_END_OF_FILE* (== 137).
 if other errors, then returns <b>not 0 integer</b>.
 
 
-==== mylua.val_int(string field)
+==== int mylua.val_int(string field)
 
 get current value of *field*.
 
@@ -280,23 +280,23 @@ get current value of *field*.
   1 row in set (0.00 sec)
 
 
-==== mylua.set_memory_limit_bytes(int limit)
+==== void mylua.set_memory_limit_bytes(int limit)
 
 set lua memory limit to *limit*.
 default is 1MB.
 
 
-==== mylua.get_memory_limit_bytes()
+==== int mylua.get_memory_limit_bytes()
 
 get current lua memory limit.
 
 
-==== mylua.startclock
+==== number mylua.startclock
 
 os.clock() result at the time of starting query execution.
 
 
-==== mylua.timeout
+==== number mylua.timeout
 
 mylua.startclock + timeout seconds.
 
