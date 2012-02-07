@@ -132,7 +132,7 @@ foreach ($args_init_table_default as $i => $_) {
     if ($i == 0) {
         $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \'.mylua_test\' doesn\'t exist');
     } else if ($i == 1) {
-        $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \'localuser.\' doesn\'t exist');
+        $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \''.$db.'.\' doesn\'t exist');
     } else {
         $test_a[] = test(q($code), q('{}'), ok(array(false, false)));
     }
@@ -195,7 +195,7 @@ foreach ($args_init_table_default as $i => $_) {
     if ($i == 0) {
         $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \'.mylua_test\' doesn\'t exist');
     } else if ($i == 1) {
-        $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \'localuser.\' doesn\'t exist');
+        $test_a[] = test(q($code), q('{}'), null, 1146, 'Table \''.$db.'.\' doesn\'t exist');
     } else {
         $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: mylua_index_read_map: mylua_area->init_table_done'));
     }
