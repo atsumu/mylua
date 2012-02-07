@@ -533,6 +533,44 @@ static int mylua_init_table(lua_State *lua) {
 }
 
 
+static int mylua_init_extra_field(lua_State *lua) {
+#define MLIEF_ASSERT(cond) \
+  if (cond) { \
+  } else { \
+    lua_pushstring(lua, "mylua_index_prev: " # cond); \
+    lua_error(lua); \
+    return 0; \
+  }
+
+  int argi = 0;
+  int argc = lua_gettop(lua);
+  MLIEF_ASSERT(argc >= 1);
+
+  while (++argi <= argc) {
+    luaL_checktype(lua, argi, LUA_TSTRING);
+  }
+
+  argi = 0;
+
+  lua_getfield(lua, LUA_REGISTRYINDEX, "mylua_area");
+  MYLUA_AREA *mylua_area = (MYLUA_AREA *)lua_touserdata(lua, -1);
+  MLIEF_ASSERT(mylua_area->init_table_done);
+
+  TABLE_LIST *table_list = mylua_area->table_list;
+  TABLE *table = table_list->table;
+
+  while (++argi <= argc) {
+    const char *fld = lua_tostring(lua, argi);
+    MLIEF_ASSERT(fld);
+    Field *field = mylua_get_field(table, fld);
+    MLIEF_ASSERT(field);
+    bitmap_set_bit(table->read_set, field->field_index);
+  }
+
+  return 0;
+}
+
+
 static int mylua_index_read_map(lua_State *lua) {
 #define MLIRM_ASSERT(cond) \
   if (cond) { \
@@ -808,6 +846,7 @@ static int mylua_get_memory_limit_bytes(lua_State *lua) {
 int luaopen_mylua(lua_State *lua) {
   luaL_Reg reg[] = {
     { "init_table", mylua_init_table },
+    { "init_extra_field", mylua_init_extra_field },
     { "index_read_map", mylua_index_read_map },
     { "index_prev", mylua_index_prev },
     { "index_next", mylua_index_next },

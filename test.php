@@ -139,6 +139,30 @@ foreach ($args_init_table_default as $i => $_) {
 }
 
 
+// mylua.init_extra_field
+$code = '
+    mylua.init_table("'.$db.'", "mylua_test", "uid", "uid", "sid")
+    mylua.init_extra_field("ex1")
+';
+$test_a[] = test(q($code), q('{}'), ok());
+
+$code = '
+    mylua.init_table("'.$db.'", "mylua_test", "uid", "uid", "sid")
+    mylua.init_extra_field("ex1", "ex2")
+';
+$test_a[] = test(q($code), q('{}'), ok());
+
+// mylua.init_extra_field (wrong argument)
+$args_invalid = array('nil' => 'nil', 'boolean' => 'true', 'number' => '0', 'table' => '{}', 'function' => 'function () return 1 end');
+foreach ($args_invalid as $type => $invalid) {
+    $code = "
+        mylua.init_table('{$db}', 'mylua_test', 'uid', 'uid', 'sid')
+        mylua.init_extra_field({$invalid})
+    ";
+    $test_a[] = test(q($code), q('{}'), error('lua_cpcall(pmylua): LUA_ERRRUN: [string ...]:3: bad argument #1 to \'init_extra_field\' (string expected, got '.$type.')'));
+}
+
+
 // mylua.index_read_map
 $code = '
     mylua.init_table("'.$db.'", "mylua_test", "uid", "uid", "sid")
@@ -334,21 +358,40 @@ $test_a[] = test(q($code), q('{}'), ok(array(2147483647, 2147483646)));
 $code = '
     local t = {}
     mylua.init_table("'.$db.'", "mylua_test", "uid", "uid", "sid")
+    mylua.init_extra_field("ex1", "ex2")
     mylua.index_read_map(mylua.HA_READ_KEY_OR_NEXT, 1, 1)
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     mylua.index_next()
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     mylua.index_prev()
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     mylua.index_read_map(mylua.HA_READ_KEY_OR_PREV, 9, 9999)
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     mylua.index_prev()
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     mylua.index_next()
-    table.insert(t, { mylua.val_int("uid"), mylua.val_int("sid") })
+    table.insert(t, mylua.val_int("uid"))
+    table.insert(t, mylua.val_int("sid"))
+    table.insert(t, mylua.val_int("ex1"))
+    table.insert(t, mylua.val_int("ex2"))
     return t
 ';
-$test_a[] = test(q($code), q('{}'), ok(array(array(1, 1), array(1, 10), array(1, 1), array(9, 9000), array(9, 900), array(9, 9000))));
+$test_a[] = test(q($code), q('{}'), ok(array(1, 1, 10, 100, 1, 10, 100, 1000, 1, 1, 10, 100, 9, 9000, 90000, 900000, 9, 900, 9000, 90000, 9, 9000, 90000, 900000)));
 
 
 // use sub part of key
@@ -425,6 +468,8 @@ function create_table() {
         CREATE TEMPORARY TABLE mylua_test (
             uid INT NOT NULL,
             sid INT NOT NULL,
+            ex1 INT NOT NULL,
+            ex2 INT NOT NULL,
             PRIMARY KEY (sid),
             KEY (uid, sid)
         ) Engine=InnoDB;
@@ -436,12 +481,12 @@ function create_table() {
     $a = array();
     for ($uid = 1; $uid <= 9; ++$uid) {
         for ($rate = 1; $rate <= 10000; $rate *= 10) {
-            $a[] = "(".intval($uid).",".intval($uid * $rate).")";
+            $a[] = "(".intval($uid).",".intval($uid * $rate).",".intval($uid * $rate * 10).",".intval($uid * $rate * 100).")";
         }
     }
-    $a[] = "(".intval(pow(2, 31) - 1).",".intval(pow(2, 31) - 2).")";
+    $a[] = "(".intval(pow(2, 31) - 1).",".intval(pow(2, 31) - 2).",".intval(pow(2, 31) - 3).",".intval(pow(2, 31) - 4).")";
     $re = mysql_query("
-        INSERT mylua_test (uid, sid)
+        INSERT mylua_test (uid, sid, ex1, ex2)
         VALUES ".implode(",", $a)."
     ");
     if (!$re) {

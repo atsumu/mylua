@@ -177,7 +177,13 @@ data:: if no error, then assgined value returned from *lua_code*.
 ==== void mylua.init_table(string database, string table, string index, string field1, string field2, ...)
 
 init table for index search.
-field(N) should be part of index.
+field(N) must be part of index.
+
+
+==== void mylua.init_extra_field(string field1, string field2, ...)
+
+init extra field for get value.
+field(N) can be not part of index.
 
 
 ==== int mylua.index_read_map(rkey, value1, value2, ...)
