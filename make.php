@@ -14,9 +14,9 @@ $all_command_m = array(
     "prepare_mysql" => array(),
     "prepare_mylua" => array(),
     "prepare_mylua_with_luajit" => array(),
-    "install" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
-    "uninstall" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
-    "replace" => array("soname", "udfname", "plugin_dir", "mysql_host", "user"),
+    "install" => array("mysql_plugin_dir", "mysql_host", "user"),
+    "uninstall" => array("mysql_plugin_dir", "mysql_host", "user"),
+    "replace" => array("mysql_plugin_dir", "mysql_host", "user"),
 );
 
 $root_command_m = map(array(
@@ -148,39 +148,39 @@ function install($a) {
     $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
     mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
     mysql_set_charset("utf8");
-    install_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    test_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
 }
 
 function uninstall($a) {
     $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
     mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
     mysql_set_charset("utf8");
-    uninstall_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
 }
 
 function replace($a) {
     $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
     mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
     mysql_set_charset("utf8");
-    uninstall_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    install_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    test_common($a["soname"], $a["udfname"], $a["plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
 }
 
 // common
-function install_common($soname, $udfname, $plugin_dir, $host, $user, $pass) {
-    my_exec("sudo cp ".qsh($soname)." ".qsh($plugin_dir));
-    my_query("create function $udfname returns string soname ".q($soname));
+function install_common($mysql_plugin_dir, $host, $user, $pass) {
+    my_exec("sudo cp mylua.so ".qsh($mysql_plugin_dir));
+    my_query("create function mylua returns string soname 'mylua.so'");
 }
 
-function uninstall_common($soname, $udfname, $plugin_dir, $host, $user, $pass) {
-    my_exec("sudo cp ".qsh($plugin_dir."/".$soname)." ".qsh($soname.".bak"));
-    my_query("drop function if exists $udfname");
+function uninstall_common($mysql_plugin_dir, $host, $user, $pass) {
+    my_exec("sudo cp ".qsh($mysql_plugin_dir."/mylua.so")." ".qsh("mylua.so.bak"));
+    my_query("drop function if exists mylua");
 }
 
-function test_common($soname, $udfname, $plugin_dir, $host, $user, $pass) {
-    $re = my_query("select $udfname('return mylua.arg.test', ".q(json_encode(array("test" => 3))).") as json");
+function test_common($mysql_plugin_dir, $host, $user, $pass) {
+    $re = my_query("select mylua('return mylua.arg.test', ".q(json_encode(array("test" => 3))).") as json");
     $row = mysql_fetch_assoc($re);
     if (isset($row["json"])); else error_exit("test failed.");
     $result = json_decode($row["json"], 1);
