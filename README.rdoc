@@ -16,7 +16,7 @@ MyLua requires Lua (or LuaJIT), Lua CJSON, and MySQL source code.
 URL:: http://www.lua.org
 tested version:: 5.1.4
 
-make
+==== make
 
   cd mylua
   wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
@@ -28,12 +28,12 @@ make
   make local
 
 
-=== LuaJIT (optional)
+=== LuaJIT (optional) (unrecommended)
 
 URL:: http://luajit.org
 tested versoin:: 2.0.0-beta9
 
-make
+==== make
 
   cd mylua
   wget http://luajit.org/download/LuaJIT-2.0.0-beta9.tar.gz
@@ -45,12 +45,17 @@ make
   make install PREFIX=`pwd`
 
 
+==== Limitation
+
+if using luajit, `lua execution timeout` does not work correctly.
+
+
 === Lua CJSON
 
 URL:: http://www.kyne.com.au/~mark/software/lua-cjson.php
 tested version:: 1.0.4
 
-make
+==== make
 
   cd mylua
   wget http://www.kyne.com.au/~mark/software/download/lua-cjson-1.0.4.tar.gz
@@ -71,7 +76,7 @@ REF: http://www.hi-ho.ne.jp/babaq/linux/libtips.html (japanese)
 URL:: http://www.mysql.com
 tested version:: 5.1.41
 
-configure
+==== configure
 
   cd mylua
   wget http://downloads.mysql.com/archives/mysql-5.1/mysql-5.1.41.tar.gz
@@ -93,7 +98,7 @@ check directory tree is like this.
    + mysql/
    ... and etc
 
-install
+==== install
 
   cd mylua
 
@@ -312,7 +317,7 @@ mylua.timeout is compared to os.clock() in lua count hook.
 
 if os.clock() greater than mylua.timeout, error is occured.
 
-if using luajit, it does not work well.
+if using luajit, it does not work correctly.
 
 
 == License

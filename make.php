@@ -75,14 +75,14 @@ function print_usage($all_command_m) {
 // command
 function download_all() {
     download_lua();
-    download_luajit();
+    //download_luajit();
     download_lua_cjson();
     download_mysql();
 }
 
 function prepare_all() {
     prepare_lua();
-    prepare_luajit();
+    //prepare_luajit();
     prepare_lua_cjson();
     prepare_mysql();
 }
