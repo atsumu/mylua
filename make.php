@@ -7,22 +7,27 @@ set_exception_handler('exception_handler');
 $command = isset($argv[1]) ? $argv[1] : '';
 
 $all_command_m = array(
-    "prepare" => array(),
+    "download_all" => array(),
+    "download_lua" => array(),
+    "download_luajit" => array(),
+    "download_lua_cjson" => array(),
+    "download_mysql" => array(),
+    "prepare_all" => array(),
     "prepare_lua" => array(),
     "prepare_luajit" => array(),
     "prepare_lua_cjson" => array(),
     "prepare_mysql" => array(),
-    "prepare_mylua" => array(),
-    "prepare_mylua_with_luajit" => array(),
+    "make_mylua" => array(),
+    "make_mylua_with_luajit" => array(),
     "install" => array("mysql_plugin_dir", "mysql_host", "user"),
     "uninstall" => array("mysql_plugin_dir", "mysql_host", "user"),
-    "replace" => array("mysql_plugin_dir", "mysql_host", "user"),
+    "reinstall" => array("mysql_plugin_dir", "mysql_host", "user"),
 );
 
 $root_command_m = map(array(
     "install",
     "uninstall",
-    "replace",
+    "reinstall",
 ));
 
 if (isset($all_command_m[$command])) {
@@ -68,18 +73,48 @@ function print_usage($all_command_m) {
 }
 
 // command
-function prepare() {
+function download_all() {
+    download_lua();
+    download_luajit();
+    download_lua_cjson();
+    download_mysql();
+}
+
+function prepare_all() {
     prepare_lua();
     prepare_luajit();
     prepare_lua_cjson();
     prepare_mysql();
-    prepare_mylua();
 }
 
-function prepare_lua() {
+function download_lua() {
     my_exec("wget http://www.lua.org/ftp/lua-5.1.4.tar.gz");
     my_exec("tar zxf lua-5.1.4.tar.gz");
     my_exec("ln -s lua-5.1.4 lua");
+}
+
+function download_luajit() {
+    my_exec("wget http://luajit.org/download/LuaJIT-2.0.0-beta9.tar.gz");
+    my_exec("tar zxf LuaJIT-2.0.0-beta9.tar.gz");
+    my_exec("ln -s LuaJIT-2.0.0-beta9 luajit");
+}
+
+function download_lua_cjson() {
+    my_exec("wget http://www.kyne.com.au/~mark/software/download/lua-cjson-1.0.4.tar.gz");
+    my_exec("tar zxf lua-cjson-1.0.4.tar.gz");
+    my_exec("ln -s lua-cjson-1.0.4 lua-cjson");
+}
+
+function download_mysql() {
+    $output = my_exec("mysql --version");
+    preg_match('/Distrib ([0-9.]+),/u', $output, $version);
+    $version = $version[1];
+    my_exec("wget http://downloads.mysql.com/archives/mysql-5.1/mysql-{$version}.tar.gz");
+    my_exec("tar zxf mysql-{$version}.tar.gz");
+    my_exec("ln -s mysql-{$version} mysql");
+}
+
+function prepare_lua() {
     my_cd("lua");
     my_exec("sed -i 's/MYCFLAGS=-DLUA_USE_POSIX/MYCFLAGS=\"-DLUA_USE_POSIX -fPIC\"/g' src/Makefile");
     my_exec("make posix");
@@ -88,9 +123,6 @@ function prepare_lua() {
 }
 
 function prepare_luajit() {
-    my_exec("wget http://luajit.org/download/LuaJIT-2.0.0-beta9.tar.gz");
-    my_exec("tar zxf LuaJIT-2.0.0-beta9.tar.gz");
-    my_exec("ln -s LuaJIT-2.0.0-beta9 luajit");
     my_cd("luajit");
     my_exec("sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC)/g' src/Makefile");
     my_exec("make");
@@ -99,9 +131,6 @@ function prepare_luajit() {
 }
 
 function prepare_lua_cjson() {
-    my_exec("wget http://www.kyne.com.au/~mark/software/download/lua-cjson-1.0.4.tar.gz");
-    my_exec("tar zxf lua-cjson-1.0.4.tar.gz");
-    my_exec("ln -s lua-cjson-1.0.4 lua-cjson");
     my_cd("lua-cjson");
     my_exec("env LUA_INCLUDE_DIR=../lua/include LUA_LIB_DIR=../lua/lib make");
     my_exec("ar rv cjson.a lua_cjson.o strbuf.o");
@@ -109,19 +138,13 @@ function prepare_lua_cjson() {
 }
 
 function prepare_mysql() {
-    $output = my_exec("mysql --version");
-    preg_match('/Distrib ([0-9.]+),/u', $output, $version);
-    $version = $version[1];
-    my_exec("wget http://downloads.mysql.com/archives/mysql-5.1/mysql-{$version}.tar.gz");
-    my_exec("tar zxf mysql-{$version}.tar.gz");
-    my_exec("ln -s mysql-{$version} mysql");
     my_cd("mysql");
     my_exec("./configure");
     my_exec("cp include/config.h include/my_config.h");
     my_cd("..");
 }
 
-function prepare_mylua($a) {
+function make_mylua($a) {
     my_exec(implode(" ", array(
         "g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC",
         "-L /usr/lib",
@@ -132,7 +155,7 @@ function prepare_mylua($a) {
     )));
 }
 
-function prepare_mylua_with_luajit($a) {
+function make_mylua_with_luajit($a) {
     my_exec(implode(" ", array(
         "g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC",
         "-L /usr/lib",
@@ -159,7 +182,7 @@ function uninstall($a) {
     uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
 }
 
-function replace($a) {
+function reinstall($a) {
     $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
     mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
     mysql_set_charset("utf8");
