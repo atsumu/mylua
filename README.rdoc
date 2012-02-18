@@ -3,7 +3,7 @@
 == About
 
 MyLua is a UDF (User-Defined Function) of MySQL.
-It makes possible to fast query on SQL hate access pattern.
+It makes possible to fast query on the access pattern not optimized in SQL.
 
 
 == Install
