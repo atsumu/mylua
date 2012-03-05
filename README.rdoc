@@ -40,7 +40,7 @@ tested versoin:: 2.0.0-beta9
   tar zxvf LuaJIT-2.0.0-beta9.tar.gz
   mv LuaJIT-2.0.0-beta9 luajit
   cd luajit
-  sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC)/g' src/Makefile
+  sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC) -fPIC/g' src/Makefile
   make
   make install PREFIX=`pwd`
 

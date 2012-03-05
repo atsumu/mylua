@@ -124,7 +124,7 @@ function prepare_lua() {
 
 function prepare_luajit() {
     my_cd("luajit");
-    my_exec("sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC)/g' src/Makefile");
+    my_exec("sed -i 's/STATIC_CC = $(CROSS)$(CC)/STATIC_CC = $(CROSS)$(CC) -fPIC/g' src/Makefile");
     my_exec("make");
     my_exec("make install PREFIX=`pwd`");
     my_cd("..");
