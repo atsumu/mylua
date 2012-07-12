@@ -291,8 +291,7 @@ typedef struct st_pmylua_arg {
   MYLUA_AREA *mylua_area;
   char *proc;
   char *arg;
-  size_t json_len;
-  const char *json;
+  size_t* length;
 } PMYLUA_ARG;
 
 
@@ -354,7 +353,27 @@ int pmylua(lua_State *lua) {
   // call cjson.encode.
   lua_call(lua, 1, 1);
 
-  pmylua_arg->json = lua_tolstring(lua, -1, &pmylua_arg->json_len);
+  const char *json;
+  size_t json_len;
+  json = lua_tolstring(lua, -1, &json_len);
+  if (json) {
+  } else {
+    lua_pushstring(lua, "lua_tolstring(lua, -1, &json_len): ");
+    lua_error(lua);
+    return 0;
+  }
+
+  if (json_len + 1 > pmylua_arg->mylua_area->result_size) {
+    if (mylua_area_realloc_result(pmylua_arg->mylua_area, json_len + 1)) {
+    } else {
+      lua_pushstring(lua, "mylua_area_realloc_result failed.");
+      lua_error(lua);
+      return 0;
+    }
+  }
+  memcpy(pmylua_arg->mylua_area->result, json, json_len + 1);
+  *pmylua_arg->length = json_len;
+
   return 0;
 }
 
@@ -406,6 +425,7 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   pmylua_arg.mylua_area = mylua_area;
   pmylua_arg.proc = proc;
   pmylua_arg.arg = arg;
+  pmylua_arg.length = length;
   if (int err = lua_cpcall(lua, pmylua, &pmylua_arg)) {
     switch (err) {
     case LUA_ERRRUN:
@@ -419,18 +439,8 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
     }
   }
 
-  size_t json_len = pmylua_arg.json_len;
-  const char *json = pmylua_arg.json;
-  ML_ASSERT(json, "return json is null.");
-
-  if (json_len + 1 > mylua_area->result_size) {
-    ML_ASSERT(mylua_area_realloc_result(mylua_area, json_len + 1), "mylua_area_realloc_result failed.");
-  }
-  memcpy(mylua_area->result, json, json_len + 1);
-
   ML_CLEAN();
 
-  *length = json_len;
   return mylua_area->result;
 }
 
