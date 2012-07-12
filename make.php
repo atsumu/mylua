@@ -19,9 +19,9 @@ $all_command_m = array(
     "prepare_mysql" => array(),
     "make_mylua" => array(),
     "make_mylua_with_luajit" => array(),
-    "install" => array("mysql_plugin_dir", "mysql_host", "user"),
-    "uninstall" => array("mysql_plugin_dir", "mysql_host", "user"),
-    "reinstall" => array("mysql_plugin_dir", "mysql_host", "user"),
+    "install" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
+    "uninstall" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
+    "reinstall" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
 );
 
 $root_command_m = map(array(
@@ -66,7 +66,7 @@ function print_usage($all_command_m) {
     foreach ($all_command_m as $cmd => $args) {
         print "  php ".$base." ".$cmd;
         foreach ($args as $arg) {
-            print " <".$arg.">";
+            print " ".$arg;
         }
         print "\n";
     }
