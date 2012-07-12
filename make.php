@@ -19,9 +19,9 @@ $all_command_m = array(
     "prepare_mysql" => array(),
     "make_mylua" => array(),
     "make_mylua_with_luajit" => array(),
-    "install" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
-    "uninstall" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
-    "reinstall" => array("<mysql_plugin_dir>", "<mysql_host[:port]>", "<mysql_user>"),
+    "install" => array("mysql_plugin_dir", "mysql_host", "mysql_user"),
+    "uninstall" => array("mysql_plugin_dir", "mysql_host", "mysql_user"),
+    "reinstall" => array("mysql_plugin_dir", "mysql_host", "mysql_user"),
 );
 
 $root_command_m = map(array(
@@ -66,7 +66,7 @@ function print_usage($all_command_m) {
     foreach ($all_command_m as $cmd => $args) {
         print "  php ".$base." ".$cmd;
         foreach ($args as $arg) {
-            print " ".$arg;
+            print " <".$arg.">";
         }
         print "\n";
     }
@@ -168,37 +168,40 @@ function make_mylua_with_luajit($a) {
 }
 
 function install($a) {
-    $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
-    mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
+    $a["pass"] = read_pass("mysql password (".$a["mysql_user"]."): ");
+    mysql_connect($a["mysql_host"], $a["mysql_user"], $a["pass"]);
     mysql_set_charset("utf8");
-    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    mysql_select_db("mysql");
+    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
+    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
 }
 
 function uninstall($a) {
-    $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
-    mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
+    $a["pass"] = read_pass("mysql password (".$a["mysql_user"]."): ");
+    mysql_connect($a["mysql_host"], $a["mysql_user"], $a["pass"]);
     mysql_set_charset("utf8");
-    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    mysql_select_db("mysql");
+    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
 }
 
 function reinstall($a) {
-    $a["pass"] = read_pass("mysql password (".$a["user"]."): ");
-    mysql_connect($a["mysql_host"], $a["user"], $a["pass"]);
+    $a["pass"] = read_pass("mysql password (".$a["mysql_user"]."): ");
+    mysql_connect($a["mysql_host"], $a["mysql_user"], $a["pass"]);
     mysql_set_charset("utf8");
-    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
-    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["user"], $a["pass"]);
+    mysql_select_db("mysql");
+    uninstall_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
+    install_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
+    test_common($a["mysql_plugin_dir"], $a["mysql_host"], $a["mysql_user"], $a["pass"]);
 }
 
 // common
 function install_common($mysql_plugin_dir, $host, $user, $pass) {
-    my_exec("sudo cp mylua.so ".qsh($mysql_plugin_dir));
+    my_exec("cp mylua.so ".qsh($mysql_plugin_dir));
     my_query("create function mylua returns string soname 'mylua.so'");
 }
 
 function uninstall_common($mysql_plugin_dir, $host, $user, $pass) {
-    my_exec("sudo cp ".qsh($mysql_plugin_dir."/mylua.so")." ".qsh("mylua.so.bak"));
+    my_exec("cp ".qsh($mysql_plugin_dir."/mylua.so")." ".qsh("mylua.so.bak"));
     my_query("drop function if exists mylua");
 }
 
