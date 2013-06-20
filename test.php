@@ -588,11 +588,12 @@ function run($test_a) {
             print "\n";
             return 1;
         } else {
+            $line = $test['line'];
             $code = summary($test['code']);
             $arg  = summary($test['arg']);
             $ret  = summary($v);
             $exp  = summary($test['expect']);
-            printf("%4d: ok. code=%-10s arg=%-10s %10s === %-10s", $i, $code, $arg, $ret, $exp);
+            printf("%4d: ok. line=%-4s code=%-10s arg=%-10s %10s === %-10s", $i, $line, $code, $arg, $ret, $exp);
             if (isset($v['message'])) {
                 print " ".$v['message'];
             } else if ($v) {
@@ -607,11 +608,13 @@ function run($test_a) {
 }
 
 function test($code, $arg, $json, $errno = 0, $error = "") {
-    return array('code' => $code, 'arg' => $arg, 'expect' => array('json' => $json, 'errno' => $errno, 'error' => $error));
+    $trace = debug_backtrace();
+    return array('line' => $trace[0]['line'], 'code' => $code, 'arg' => $arg, 'expect' => array('json' => $json, 'errno' => $errno, 'error' => $error));
 }
 
 function test_ext($code, $arg, $ext, $json, $errno = 0, $error = "") {
-    return array('code' => $code, 'arg' => $arg, 'ext' => $ext, 'expect' => array('json' => $json, 'errno' => $errno, 'error' => $error));
+    $trace = debug_backtrace();
+    return array('line' => $trace[0]['line'], 'code' => $code, 'arg' => $arg, 'ext' => $ext, 'expect' => array('json' => $json, 'errno' => $errno, 'error' => $error));
 }
 
 function error($message) {
