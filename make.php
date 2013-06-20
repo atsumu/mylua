@@ -18,6 +18,7 @@ $all_command_m = array(
     "prepare_lua_cjson" => array(),
     "prepare_mysql" => array(),
     "make_mylua" => array(),
+    "make_mylua_for_debug" => array(),
     "make_mylua_with_luajit" => array(),
     "install" => array("mysql_plugin_dir", "mysql_host", "mysql_user"),
     "uninstall" => array("mysql_plugin_dir", "mysql_host", "mysql_user"),
@@ -147,6 +148,17 @@ function prepare_mysql() {
 function make_mylua($a) {
     my_exec(implode(" ", array(
         "g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC",
+        "-L /usr/lib",
+        "-I ./mysql/include -I ./mysql/sql -I ./mysql/regex",
+        "-I ./lua/include",
+        "src/mylua.cc lua/lib/liblua.a lua-cjson/cjson.a",
+        "-o mylua.so",
+    )));
+}
+
+function make_mylua_for_debug($a) {
+    my_exec(implode(" ", array(
+        "g++ -g -O0 -lm -ldl -Wall -nostartfiles -shared -fPIC",
         "-L /usr/lib",
         "-I ./mysql/include -I ./mysql/sql -I ./mysql/regex",
         "-I ./lua/include",
