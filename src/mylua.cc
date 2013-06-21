@@ -91,6 +91,7 @@ typedef struct st_mylua_area {
   KEY *key;
   char *result;
   size_t result_size;
+  size_t json_len;
   TABLE_LIST *table_list; // for passing between c and lua. allocated on c stack.
   int init_table_done;
   int init_one_table_done;
@@ -162,6 +163,8 @@ MYLUA_AREA *mylua_area_alloc(uint result_strlen) {
   if (mylua_area->result); else goto err;
   mylua_area->result[0] = '\0';
 
+  mylua_area->json_len = 0;
+
   mylua_area->init_table_done = 0;
   mylua_area->init_one_table_done = 0;
   mylua_area->index_init_done = 0;
@@ -208,7 +211,7 @@ static Item_result mylua_argtype_map[MYLUA_ARG_COUNT] = {
 };
 
 
-void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const char *msg2)
+void mylua_error_json(char *dst, size_t *length, const char *msg1, const char *msg2)
 {
   const char *json_pre = "{\"ok\":false,\"message\":\"";
   const char *json_suf = "\"}";
@@ -243,55 +246,10 @@ void mylua_error_json(char *dst, unsigned long *length, const char *msg1, const 
 }
 
 
-extern "C" my_bool mylua_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
-{
-#define MLI_ASSERT_1(cond, msg) \
-  if (cond) { \
-  } else { \
-    strcpy(message, msg); \
-    return 1; \
-  }
-#define MLI_ASSERT_2(cond, msg) \
-  if (cond) { \
-  } else { \
-    mylua_area_dealloc(tl_area); \
-    strcpy(message, msg); \
-    return 1; \
-  }
-
-  // check arguments.
-  MLI_ASSERT_1(args->arg_count == MYLUA_ARG_COUNT, "Wrong arguments count.");
-  for (int i = 0; i < MYLUA_ARG_COUNT; ++i) {
-    MLI_ASSERT_1(args->args[i], "Not constant argument.");
-    MLI_ASSERT_1(args->arg_type[i] == mylua_argtype_map[i], "Wrong argument type.");
-  }
-
-  // process for return value.
-  // initid->maybe_null = 1; // default is 1.
-  //initid->max_length = 65535; // blob
-  initid->max_length = 16777215; // medium blob (?)
-
-  // mylua_area
-  MYLUA_AREA *mylua_area = mylua_area_alloc(MYLUA_ERRJSON_MAXLEN + 1);
-  MLI_ASSERT_1(mylua_area, "Couldn't allocate memory. (mylua_area)");
-
-  initid->ptr = (char *)mylua_area;
-  return 0;
-}
-
-
-extern "C" void mylua_deinit(UDF_INIT *initid)
-{
-  mylua_area_dealloc((MYLUA_AREA *)initid->ptr);
-  initid->ptr = 0;
-}
-
-
 typedef struct st_pmylua_arg {
   MYLUA_AREA *mylua_area;
   char *proc;
   char *arg;
-  size_t* length;
 } PMYLUA_ARG;
 
 
@@ -353,28 +311,111 @@ int pmylua(lua_State *lua) {
   // call cjson.encode.
   lua_call(lua, 1, 1);
 
-  const char *json;
   size_t json_len;
-  json = lua_tolstring(lua, -1, &json_len);
+  const char *json = lua_tolstring(lua, -1, &json_len);
   if (json) {
   } else {
     lua_pushstring(lua, "lua_tolstring(lua, -1, &json_len): ");
     lua_error(lua);
     return 0;
   }
-
-  if (json_len + 1 > pmylua_arg->mylua_area->result_size) {
-    if (mylua_area_realloc_result(pmylua_arg->mylua_area, json_len + 1)) {
+  
+  if (json_len + 1 > mylua_area->result_size) {
+    if (mylua_area_realloc_result(mylua_area, json_len + 1)) {
     } else {
-      lua_pushstring(lua, "mylua_area_realloc_result failed.");
+      lua_pushstring(lua, "failed to mylua_area_realloc_result.");
       lua_error(lua);
       return 0;
     }
   }
-  memcpy(pmylua_arg->mylua_area->result, json, json_len + 1);
-  *pmylua_arg->length = json_len;
+  memcpy(mylua_area->result, json, json_len + 1);
+  mylua_area->json_len = json_len;
 
   return 0;
+}
+
+
+extern "C" my_bool mylua_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+#define MLI_ASSERT_1(cond, msg) \
+  if (cond) { \
+  } else { \
+    snprintf(message, MYSQL_ERRMSG_SIZE, "%s", msg); \
+    return 1; \
+  }
+#define MLI_ASSERT_2(cond, msg) \
+  if (cond) { \
+  } else { \
+    snprintf(message, MYSQL_ERRMSG_SIZE, "%s", msg); \
+    mylua_area_dealloc(mylua_area); \
+    return 1; \
+  }
+
+  initid->ptr = 0;
+
+  // check arguments.
+  MLI_ASSERT_1(args->arg_count == MYLUA_ARG_COUNT, "Wrong arguments count.");
+  for (int i = 0; i < MYLUA_ARG_COUNT; ++i) {
+    MLI_ASSERT_1(args->args[i], "Not constant argument.");
+    MLI_ASSERT_1(args->arg_type[i] == mylua_argtype_map[i], "Wrong argument type.");
+  }
+
+  // process for return value.
+  // initid->maybe_null = 1; // default is 1.
+  //initid->max_length = 65535; // blob
+  initid->max_length = 16777215; // medium blob (?)
+
+  // mylua_area
+  MYLUA_AREA *mylua_area = mylua_area_alloc(MYLUA_ERRJSON_MAXLEN + 1);
+  MLI_ASSERT_1(mylua_area, "Couldn't allocate memory. (mylua_area)");
+
+  lua_State *lua = mylua_area->lua;
+
+  // arguments
+  char *proc = args->args[MYLUA_ARG_PROC];
+  char *arg  = args->args[MYLUA_ARG_ARG];
+
+  MLI_ASSERT_2(proc, "argument <proc> should not be null.");
+  MLI_ASSERT_2(arg, "argument <arg> should not be null.");
+
+  // alloc table_list
+  TABLE_LIST table_list;
+  mylua_area->table_list = &table_list;
+
+  // run query
+  PMYLUA_ARG pmylua_arg = {0};
+  pmylua_arg.mylua_area = mylua_area;
+  pmylua_arg.proc = proc;
+  pmylua_arg.arg = arg;
+  if (int err = lua_cpcall(lua, pmylua, &pmylua_arg)) {
+    const char *msg1 = "";
+    const char *msg2 = lua_tostring(lua, -1);
+    if (msg2 == NULL) msg2 = "";
+    switch (err) {
+    case LUA_ERRRUN: msg1 = "lua_cpcall(pmylua): LUA_ERRRUN: "; break;
+    case LUA_ERRMEM: msg1 = "lua_cpcall(pmylua): LUA_ERRMEM: "; break;
+    case LUA_ERRERR: msg1 = "lua_cpcall(pmylua): LUA_ERRERR: "; break;
+    default: msg1 = "lua_cpcall(pmylua): LUA_UNKNOWN: "; break;
+    }
+    mylua_error_json(mylua_area->result, &mylua_area->json_len, msg1, msg2);
+  }
+
+  if (mylua_area->index_init_done) {
+    table_list.table->file->ha_index_end();
+  }
+  if (mylua_area->init_one_table_done) {
+    close_thread_tables(current_thd);
+  }
+
+  initid->ptr = (char *)mylua_area;
+  return 0;
+}
+
+
+extern "C" void mylua_deinit(UDF_INIT *initid)
+{
+  mylua_area_dealloc((MYLUA_AREA *)initid->ptr);
+  initid->ptr = 0;
 }
 
 
@@ -385,63 +426,15 @@ extern "C" char *mylua(UDF_INIT *initid, UDF_ARGS *args, char *result, unsigned 
   *error = 0;
 
   MYLUA_AREA *mylua_area = (MYLUA_AREA *)initid->ptr;
-  lua_State *lua = mylua_area->lua;
 
-  // arguments
-  char *proc = args->args[MYLUA_ARG_PROC];
-  char *arg  = args->args[MYLUA_ARG_ARG];
-
-  // alloc table_list
-  TABLE_LIST table_list;
-  mylua_area->table_list = &table_list;
-
-// use macro, because compile error occured when use goto.
-#define ML_CLEAN() \
-  if (mylua_area->index_init_done) { \
-    table_list.table->file->ha_index_end(); \
-  } \
-  if (mylua_area->init_one_table_done) { \
-    close_thread_tables(current_thd); \
+  if (mylua_area->json_len) {
+    *length = mylua_area->json_len;
+    return mylua_area->result;
+  } else {
+    *is_null = 1;
+    *error = 1;
+    return NULL;
   }
-
-#define ML_ASSERT(cond, msg) \
-  if (cond) { \
-  } else { \
-    ML_CLEAN(); \
-    const char *errmsg = lua_tostring(lua, -1); \
-    if (errmsg == NULL) errmsg = ""; \
-    mylua_error_json(mylua_area->result, length, msg, errmsg); \
-    if (*length == 0) { \
-      *is_null = 1; \
-      return 0; \
-    } \
-    return mylua_area->result; \
-  }
-
-  ML_ASSERT(proc, "argument <proc> should not be null.");
-  ML_ASSERT(arg, "argument <arg> should not be null.");
-
-  PMYLUA_ARG pmylua_arg = {0};
-  pmylua_arg.mylua_area = mylua_area;
-  pmylua_arg.proc = proc;
-  pmylua_arg.arg = arg;
-  pmylua_arg.length = length;
-  if (int err = lua_cpcall(lua, pmylua, &pmylua_arg)) {
-    switch (err) {
-    case LUA_ERRRUN:
-      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRRUN: ");
-    case LUA_ERRMEM:
-      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRMEM: ");
-    case LUA_ERRERR:
-      ML_ASSERT(0, "lua_cpcall(pmylua): LUA_ERRERR: ");
-    default:
-      ML_ASSERT(0, "lua_cpcall(pmylua): defualt: ");
-    }
-  }
-
-  ML_CLEAN();
-
-  return mylua_area->result;
 }
 
 
@@ -547,7 +540,7 @@ static int mylua_init_extra_field(lua_State *lua) {
 #define MLIEF_ASSERT(cond) \
   if (cond) { \
   } else { \
-    lua_pushstring(lua, "mylua_index_prev: " # cond); \
+    lua_pushstring(lua, "mylua_init_extra_field: " # cond); \
     lua_error(lua); \
     return 0; \
   }
@@ -835,7 +828,7 @@ static int mylua_get_memory_limit_bytes(lua_State *lua) {
 #define MLGMLB_ASSERT(cond) \
   if (cond) { \
   } else { \
-    lua_pushstring(lua, "mylua_set_memory_limit_bytes: " # cond); \
+    lua_pushstring(lua, "mylua_get_memory_limit_bytes: " # cond); \
     lua_error(lua); \
     return 0; \
   }
