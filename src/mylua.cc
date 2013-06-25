@@ -1,6 +1,20 @@
 #define MYSQL_DYNAMIC_PLUGIN
 #define MYSQL_SERVER 1
-#include "mysql_priv.h"
+
+#include "mysql_version.h"
+
+#if MYSQL_VERSION_ID >= 50500
+# define DBUG_OFF
+//# include <sql_priv.h>
+//# include <sql_class.h>
+//# include <probes_mysql.h>
+//# include <sql_plugin.h>
+//# include <sql_show.h>
+# include <sql_base.h>
+//# include <my_dbug.h>
+#else
+# include "mysql_priv.h"
+#endif
 
 #include "lua.hpp"
 
@@ -484,9 +498,10 @@ static int mylua_init_table(lua_State *lua) {
 
   argi = 0;
 
-  const char *db = lua_tostring(lua, ++argi);
-  const char *tbl = lua_tostring(lua, ++argi);
-  const char *idx = lua_tostring(lua, ++argi);
+  size_t db_len, tbl_len, idx_len;
+  const char *db = lua_tolstring(lua, ++argi, &db_len);
+  const char *tbl = lua_tolstring(lua, ++argi, &tbl_len);
+  const char *idx = lua_tolstring(lua, ++argi, &idx_len);
   MLIT_ASSERT(db && tbl && idx);
   int fld_0 = argi;
   uint fld_c = argc - argi;
@@ -497,9 +512,17 @@ static int mylua_init_table(lua_State *lua) {
   TABLE_LIST *table_list = mylua_area->table_list;
 
   MLIT_ASSERT(!mylua_area->init_one_table_done);
+#if MYSQL_VERSION_ID >= 50500
+  table_list->init_one_table(db, db_len, tbl, tbl_len, tbl, TL_READ);
+#else
   table_list->init_one_table(db, tbl, TL_READ);
+#endif
   mylua_area->init_one_table_done = 1;
+#if MYSQL_VERSION_ID >= 50500
+  MLIT_ASSERT(!open_and_lock_tables(current_thd, table_list, FALSE, 0));
+#else
   MLIT_ASSERT(!simple_open_n_lock_tables(current_thd, table_list));
+#endif
 
   TABLE *table = table_list->table;
   MLIT_ASSERT(table);

@@ -17,6 +17,7 @@ $all_command_m = array(
     "prepare_luajit" => array(),
     "prepare_lua_cjson" => array(),
     "prepare_mysql" => array(),
+    "prepare_mysql_55" => array(),
     "make_mylua" => array(),
     "make_mylua_for_debug" => array(),
     "make_mylua_with_luajit" => array(),
@@ -142,6 +143,13 @@ function prepare_mysql() {
     my_cd("mysql");
     my_exec("./configure");
     my_exec("cp include/config.h include/my_config.h");
+    my_cd("..");
+}
+
+function prepare_mysql_55() {
+    my_cd("mysql");
+    my_exec("cmake .");
+    my_exec("make");
     my_cd("..");
 }
 
