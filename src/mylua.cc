@@ -539,7 +539,11 @@ static int mylua_init_table(lua_State *lua) {
   KEY *key = mylua_index_init(table, idx, true);
   MLIT_ASSERT(key);
   mylua_area->index_init_done = 1;
+#if MYSQL_VERSION_ID >= 50600
+  MLIT_ASSERT(key->actual_key_parts >= fld_c);
+#else
   MLIT_ASSERT(key->key_parts >= fld_c);
+#endif
   mylua_area->key = key;
   mylua_area->using_key_parts = fld_c;
   mylua_area->keypart_map = (1 << fld_c) - 1;
@@ -728,7 +732,11 @@ static int mylua_index_read_map(lua_State *lua) {
     offset += mylua_area->key->key_part[i].length;
   }
 
+#if MYSQL_VERSION_ID >= 50600
+  int error = table->file->ha_index_read_map(table->record[0], mylua_area->keybuf, mylua_area->keypart_map, ha_read_prefix);
+#else
   int error = table->file->index_read_map(table->record[0], mylua_area->keybuf, mylua_area->keypart_map, ha_read_prefix);
+#endif
   lua_pushinteger(lua, error);
 
   mylua_area->index_read_map_done = 1;
@@ -757,7 +765,11 @@ static int mylua_index_prev(lua_State *lua) {
   TABLE_LIST *table_list = mylua_area->table_list;
   TABLE *table = table_list->table;
 
+#if MYSQL_VERSION_ID >= 50600
+  int error = table->file->ha_index_prev(table->record[0]);
+#else
   int error = table->file->index_prev(table->record[0]);
+#endif
 
   lua_pushinteger(lua, error);
 
@@ -785,7 +797,11 @@ static int mylua_index_next(lua_State *lua) {
   TABLE_LIST *table_list = mylua_area->table_list;
   TABLE *table = table_list->table;
 
+#if MYSQL_VERSION_ID >= 50600
+  int error = table->file->ha_index_next(table->record[0]);
+#else
   int error = table->file->index_next(table->record[0]);
+#endif
 
   lua_pushinteger(lua, error);
 
