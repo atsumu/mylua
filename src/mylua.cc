@@ -518,7 +518,7 @@ static int mylua_init_table(lua_State *lua) {
   table_list->init_one_table(db, tbl, TL_READ);
 #endif
   mylua_area->init_one_table_done = 1;
-#if MYSQL_VERSION_ID >= 50500
+#if MYSQL_VERSION_ID >= 50600
   if (!open_temporary_tables(current_thd, table_list)) {
     MLIT_ASSERT(!open_and_lock_tables(current_thd, table_list, FALSE, 0));
   }
