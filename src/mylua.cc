@@ -522,6 +522,8 @@ static int mylua_init_table(lua_State *lua) {
   if (!open_temporary_tables(current_thd, table_list)) {
     MLIT_ASSERT(!open_and_lock_tables(current_thd, table_list, FALSE, 0));
   }
+#elif MYSQL_VERSION_ID >= 50500
+  MLIT_ASSERT(!open_and_lock_tables(current_thd, table_list, FALSE, 0));
 #else
   MLIT_ASSERT(!simple_open_n_lock_tables(current_thd, table_list));
 #endif
