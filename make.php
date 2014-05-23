@@ -1,7 +1,7 @@
 <?php
 
-error_reporting(E_ALL);
-set_error_handler('error_handler');
+error_reporting(E_ALL & ~E_NOTICE);
+set_error_handler('error_handler', E_ALL & ~E_NOTICE);
 set_exception_handler('exception_handler');
 
 $command = isset($argv[1]) ? $argv[1] : '';
