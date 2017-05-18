@@ -12,6 +12,7 @@ $all_command_m = array(
     "download_luajit" => array(),
     "download_lua_cjson" => array(),
     "download_mysql" => array(),
+    "download_mysql_57" => array(),
     "prepare_all" => array(),
     "prepare_lua" => array(),
     "prepare_luajit" => array(),
@@ -79,14 +80,16 @@ function download_all() {
     download_lua();
     //download_luajit();
     download_lua_cjson();
-    download_mysql();
+    //download_mysql();
+    download_mysql_57();
 }
 
 function prepare_all() {
     prepare_lua();
     //prepare_luajit();
     prepare_lua_cjson();
-    prepare_mysql();
+    //prepare_mysql();
+    prepare_mysql_57();
 }
 
 function download_lua() {
@@ -114,6 +117,12 @@ function download_mysql() {
     my_exec("wget http://downloads.mysql.com/archives/mysql-5.1/mysql-{$version}.tar.gz");
     my_exec("tar zxf mysql-{$version}.tar.gz");
     my_exec("ln -s mysql-{$version} mysql");
+}
+
+function download_mysql_57() {
+    my_exec("wget https://dev.mysql.com/get/Downloads/MySQL-5.7/mysql-boost-5.7.18.tar.gz");
+    my_exec("tar zxf mysql-boost-5.7.18.tar.gz");
+    my_exec("ln -s mysql-boost-5.7.18.tar.gz mysql");
 }
 
 function prepare_lua() {
@@ -149,6 +158,13 @@ function prepare_mysql() {
 function prepare_mysql_55() {
     my_cd("mysql");
     my_exec("cmake .");
+    my_exec("make");
+    my_cd("..");
+}
+
+function prepare_mysql_57() {
+    my_cd("mysql");
+    my_exec("cmake . -DWITH_BOOST=./boost/boost_1_59_0");
     my_exec("make");
     my_cd("..");
 }
