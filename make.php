@@ -122,7 +122,7 @@ function download_mysql() {
 function download_mysql_57() {
     my_exec("wget https://dev.mysql.com/get/Downloads/MySQL-5.7/mysql-boost-5.7.18.tar.gz");
     my_exec("tar zxf mysql-boost-5.7.18.tar.gz");
-    my_exec("ln -s mysql-boost-5.7.18 mysql");
+    my_exec("ln -s mysql-5.7.18 mysql");
 }
 
 function prepare_lua() {
