@@ -173,7 +173,7 @@ function make_mylua($a) {
     my_exec(implode(" ", array(
         "g++ -O2 -lm -ldl -Wall -nostartfiles -shared -fPIC",
         "-L /usr/lib",
-        "-I ./mysql/include -I ./mysql/sql -I ./mysql/regex",
+        "-I ./mysql/include -I ./mysql/sql -I ./mysql/regex -I ./mysql/libbinlogevents/export -I ./mysql/libbinlogevents/include",
         "-I ./lua/include",
         "src/mylua.cc lua/lib/liblua.a lua-cjson/cjson.a",
         "-o mylua.so",

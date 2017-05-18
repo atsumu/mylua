@@ -22,6 +22,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+void *__dso_handle;
+
 //======================================
 // cjson decl
 
